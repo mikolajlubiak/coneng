@@ -147,9 +147,9 @@ public:
             MultiplyMatrixVector(tri.p[2], triRotatedZ.p[2], matRotZ);
 
             // Rotate X
-            MultiplyMatrixVector(tri.p[0], triRotatedZX.p[0], matRotX);
-            MultiplyMatrixVector(tri.p[1], triRotatedZX.p[1], matRotX);
-            MultiplyMatrixVector(tri.p[2], triRotatedZX.p[2], matRotX);
+            MultiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
+            MultiplyMatrixVector(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
+            MultiplyMatrixVector(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
 
 
             // Translate triangles
