@@ -1,9 +1,9 @@
 # Include all the .cpp files.
 SRC_FILES := $(shell find -name *.cpp)
 # Link needed SDL2 libraries.
-LDFLAGS :=  -lSDL2 -lSDL2_image
+LDFLAGS :=  -lSDL2 -lpthread
 # Print every warning, be pedantic, optimize code on the 3rd level, use processor native compilation optimizations.
-CXXFLAGS := -Wall -Wextra -pedantic -O3 -march=native -mtune=native -DUNICODE -std=c++17
+CXXFLAGS := -Wall -Wextra -pedantic -O3 -march=native -mtune=native
 
 # Compile the game
 game: $(SRC_FILES)
