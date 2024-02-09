@@ -10,15 +10,185 @@
 #define RESERVE_TRIS RESERVE_VERTS * 2
 #define RESERVE_RAST_TRIS RESERVE_TRIS / 4
 
-struct vec3d {
-  float x, y, z;
+struct mat4 {
+  float m[4][4] = {{0.0f}};
+
+  void identity() {
+    this->m[0][0] = 1.0f;
+    this->m[1][1] = 1.0f;
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+  }
+
+  void rotation_x(float fAngleRad) {
+    this->m[0][0] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[1][1] = cosf(fAngleRad);
+    this->m[2][2] = cosf(fAngleRad);
+    this->m[1][2] = sinf(fAngleRad);
+    this->m[2][1] = -sinf(fAngleRad);
+  }
+
+  void rotation_y(float fAngleRad) {
+    this->m[1][1] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[0][0] = cosf(fAngleRad);
+    this->m[2][2] = cosf(fAngleRad);
+    this->m[0][2] = sinf(fAngleRad);
+    this->m[2][0] = -sinf(fAngleRad);
+  }
+
+  void rotation_z(float fAngleRad) {
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[0][0] = cosf(fAngleRad);
+    this->m[1][1] = cosf(fAngleRad);
+    this->m[0][1] = sinf(fAngleRad);
+    this->m[1][0] = -sinf(fAngleRad);
+  }
+
+  void translation(float x, float y, float z) {
+    this->m[0][0] = 1.0f;
+    this->m[1][1] = 1.0f;
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[3][0] = x;
+    this->m[3][1] = y;
+    this->m[3][2] = z;
+  }
+
+  void projection(float fFovDegrees, float fAspectRatio, float fNear,
+                  float fFar) {
+    float fFovRad = 1.0f / tanf(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+    this->m[0][0] = fAspectRatio * fFovRad;
+    this->m[1][1] = fFovRad;
+    this->m[2][2] = fFar / (fFar - fNear);
+    this->m[3][2] = (-fFar * fNear) / (fFar - fNear);
+    this->m[2][3] = 1.0f;
+    this->m[3][3] = 0.0f;
+  }
+
+  mat4 operator*=(const mat4 &other) {
+    mat4 matrix;
+    for (int c = 0; c < 4; c++)
+      for (int r = 0; r < 4; r++)
+        matrix.m[r][c] =
+            this->m[r][0] * other.m[0][c] + this->m[r][1] * other.m[1][c] +
+            this->m[r][2] * other.m[2][c] + this->m[r][3] * other.m[3][c];
+    return matrix;
+  }
 };
+
+mat4 operator*(const mat4 &lhs, const mat4 &rhs) {
+  mat4 matrix;
+  for (int c = 0; c < 4; c++)
+    for (int r = 0; r < 4; r++)
+      matrix.m[r][c] = lhs.m[r][0] * rhs.m[0][c] + lhs.m[r][1] * rhs.m[1][c] +
+                       lhs.m[r][2] * rhs.m[2][c] + lhs.m[r][3] * rhs.m[3][c];
+  return matrix;
+}
+
+struct vec3d {
+  float x, y, z = 0.0f;
+  float w = 1.0f;
+
+  vec3d &operator+=(const vec3d &other) {
+    this->x += other.x;
+    this->y += other.y;
+    this->z += other.z;
+    return *this;
+  }
+
+  vec3d &operator-=(const vec3d &other) {
+    this->x -= other.x;
+    this->y -= other.y;
+    this->z -= other.z;
+    return *this;
+  }
+
+  vec3d &operator*=(const vec3d &other) {
+    this->x *= other.x;
+    this->y *= other.y;
+    this->z *= other.z;
+    return *this;
+  }
+
+  vec3d &operator*=(float k) {
+    this->x *= k;
+    this->y *= k;
+    this->z *= k;
+    return *this;
+  }
+
+  vec3d &operator/=(const vec3d &other) {
+    this->x /= other.x;
+    this->y /= other.y;
+    this->z /= other.z;
+    return *this;
+  }
+
+  vec3d &operator/=(float k) {
+    this->x /= k;
+    this->y /= k;
+    this->z /= k;
+    return *this;
+  }
+
+  float dot_product(const vec3d &other) {
+    return this->x * other.x + this->y * other.y + this->z * other.z;
+  }
+
+  float length() { return sqrtf(this->dot_product(*this)); }
+
+  void normalize() { *this /= this->length(); }
+
+  vec3d cross_product(const vec3d &other) {
+    return {
+        (this->y * other.z - this->z * other.y),
+        (this->z * other.x - this->x * other.z),
+        (this->x * other.y - this->y * other.x),
+    };
+  }
+
+  vec3d operator*=(const mat4 &m) {
+    vec3d v;
+    v.x = this->x * m.m[0][0] + this->y * m.m[1][0] + this->z * m.m[2][0] +
+          this->w * m.m[3][0];
+    v.y = this->x * m.m[0][1] + this->y * m.m[1][1] + this->z * m.m[2][1] +
+          this->w * m.m[3][1];
+    v.z = this->x * m.m[0][2] + this->y * m.m[1][2] + this->z * m.m[2][2] +
+          this->w * m.m[3][2];
+    v.w = this->x * m.m[0][3] + this->y * m.m[1][3] + this->z * m.m[2][3] +
+          this->w * m.m[3][3];
+    return v;
+  }
+};
+
+vec3d operator*(const vec3d &lhs, const mat4 &rhs) {
+  vec3d v;
+  v.x = lhs.x * rhs.m[0][0] + lhs.y * rhs.m[1][0] + lhs.z * rhs.m[2][0] +
+        lhs.w * rhs.m[3][0];
+  v.y = lhs.x * rhs.m[0][1] + lhs.y * rhs.m[1][1] + lhs.z * rhs.m[2][1] +
+        lhs.w * rhs.m[3][1];
+  v.z = lhs.x * rhs.m[0][2] + lhs.y * rhs.m[1][2] + lhs.z * rhs.m[2][2] +
+        lhs.w * rhs.m[3][2];
+  v.w = lhs.x * rhs.m[0][3] + lhs.y * rhs.m[1][3] + lhs.z * rhs.m[2][3] +
+        lhs.w * rhs.m[3][3];
+  return v;
+}
+
+vec3d operator-(vec3d lhs, const vec3d &rhs) {
+  lhs.x -= rhs.x;
+  lhs.y -= rhs.y;
+  lhs.z -= rhs.z;
+  return lhs;
+}
 
 struct triangle {
   vec3d p[3];
 
-  wchar_t sym;
-  short col;
+  wchar_t sym = PIXEL_SOLID;
+  short col = FG_WHITE;
 
 #ifdef DEBUG
   triangle &operator=(const triangle &other) {
@@ -31,6 +201,34 @@ struct triangle {
     return *this;
   }
 #endif
+
+  triangle &operator+=(const triangle &other) {
+    this->p[0] += other.p[0];
+    this->p[1] += other.p[1];
+    this->p[2] += other.p[2];
+    return *this;
+  }
+
+  triangle &operator-=(const triangle &other) {
+    this->p[0] -= other.p[0];
+    this->p[1] -= other.p[1];
+    this->p[2] -= other.p[2];
+    return *this;
+  }
+
+  triangle &operator*=(const triangle &other) {
+    this->p[0] *= other.p[0];
+    this->p[1] *= other.p[1];
+    this->p[2] *= other.p[2];
+    return *this;
+  }
+
+  triangle &operator/=(const triangle &other) {
+    this->p[0] /= other.p[0];
+    this->p[1] /= other.p[1];
+    this->p[2] /= other.p[2];
+    return *this;
+  }
 };
 
 struct mesh {
@@ -70,12 +268,92 @@ struct mesh {
   }
 };
 
-struct mat4 {
-  float m[4][4] = {0.0f};
-};
+CHAR_INFO GetColour(float lum) {
+  short bg_col, fg_col;
+  wchar_t sym;
+  int pixel_bw = (int)(13.0f * lum);
+  switch (pixel_bw) {
+  case 0:
+    bg_col = BG_BLACK;
+    fg_col = FG_BLACK;
+    sym = PIXEL_SOLID;
+    break;
+
+  case 1:
+    bg_col = BG_BLACK;
+    fg_col = FG_DARK_GREY;
+    sym = PIXEL_QUARTER;
+    break;
+  case 2:
+    bg_col = BG_BLACK;
+    fg_col = FG_DARK_GREY;
+    sym = PIXEL_HALF;
+    break;
+  case 3:
+    bg_col = BG_BLACK;
+    fg_col = FG_DARK_GREY;
+    sym = PIXEL_THREEQUARTERS;
+    break;
+  case 4:
+    bg_col = BG_BLACK;
+    fg_col = FG_DARK_GREY;
+    sym = PIXEL_SOLID;
+    break;
+
+  case 5:
+    bg_col = BG_DARK_GREY;
+    fg_col = FG_GREY;
+    sym = PIXEL_QUARTER;
+    break;
+  case 6:
+    bg_col = BG_DARK_GREY;
+    fg_col = FG_GREY;
+    sym = PIXEL_HALF;
+    break;
+  case 7:
+    bg_col = BG_DARK_GREY;
+    fg_col = FG_GREY;
+    sym = PIXEL_THREEQUARTERS;
+    break;
+  case 8:
+    bg_col = BG_DARK_GREY;
+    fg_col = FG_GREY;
+    sym = PIXEL_SOLID;
+    break;
+
+  case 9:
+    bg_col = BG_GREY;
+    fg_col = FG_WHITE;
+    sym = PIXEL_QUARTER;
+    break;
+  case 10:
+    bg_col = BG_GREY;
+    fg_col = FG_WHITE;
+    sym = PIXEL_HALF;
+    break;
+  case 11:
+    bg_col = BG_GREY;
+    fg_col = FG_WHITE;
+    sym = PIXEL_THREEQUARTERS;
+    break;
+  case 12:
+    bg_col = BG_GREY;
+    fg_col = FG_WHITE;
+    sym = PIXEL_SOLID;
+    break;
+  default:
+    bg_col = BG_BLACK;
+    fg_col = FG_BLACK;
+    sym = PIXEL_SOLID;
+  }
+
+  CHAR_INFO c;
+  c.colour = bg_col | fg_col;
+  c.glyph = sym;
+  return c;
+}
 
 class olcGameEngine : public olcConsoleGameEngine {
-
 public:
   olcGameEngine() { m_sAppName = L"3D demo"; }
 
@@ -87,256 +365,94 @@ private:
 
   float fTheta;
 
-  void MultiplyMatrixVector(vec3d &i, vec3d &o, mat4 &m) {
-    o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
-    o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
-    o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
-    float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
-
-    if (w != 0.0f) {
-      o.x = o.x / w;
-      o.y = o.y / w;
-      o.z = o.z / w;
-    }
-  }
-
-  CHAR_INFO GetColour(float lum) {
-    short bg_col, fg_col;
-    wchar_t sym;
-    int pixel_bw = (int)(13.0f * lum);
-    switch (pixel_bw) {
-    case 0:
-      bg_col = BG_BLACK;
-      fg_col = FG_BLACK;
-      sym = PIXEL_SOLID;
-      break;
-
-    case 1:
-      bg_col = BG_BLACK;
-      fg_col = FG_DARK_GREY;
-      sym = PIXEL_QUARTER;
-      break;
-    case 2:
-      bg_col = BG_BLACK;
-      fg_col = FG_DARK_GREY;
-      sym = PIXEL_HALF;
-      break;
-    case 3:
-      bg_col = BG_BLACK;
-      fg_col = FG_DARK_GREY;
-      sym = PIXEL_THREEQUARTERS;
-      break;
-    case 4:
-      bg_col = BG_BLACK;
-      fg_col = FG_DARK_GREY;
-      sym = PIXEL_SOLID;
-      break;
-
-    case 5:
-      bg_col = BG_DARK_GREY;
-      fg_col = FG_GREY;
-      sym = PIXEL_QUARTER;
-      break;
-    case 6:
-      bg_col = BG_DARK_GREY;
-      fg_col = FG_GREY;
-      sym = PIXEL_HALF;
-      break;
-    case 7:
-      bg_col = BG_DARK_GREY;
-      fg_col = FG_GREY;
-      sym = PIXEL_THREEQUARTERS;
-      break;
-    case 8:
-      bg_col = BG_DARK_GREY;
-      fg_col = FG_GREY;
-      sym = PIXEL_SOLID;
-      break;
-
-    case 9:
-      bg_col = BG_GREY;
-      fg_col = FG_WHITE;
-      sym = PIXEL_QUARTER;
-      break;
-    case 10:
-      bg_col = BG_GREY;
-      fg_col = FG_WHITE;
-      sym = PIXEL_HALF;
-      break;
-    case 11:
-      bg_col = BG_GREY;
-      fg_col = FG_WHITE;
-      sym = PIXEL_THREEQUARTERS;
-      break;
-    case 12:
-      bg_col = BG_GREY;
-      fg_col = FG_WHITE;
-      sym = PIXEL_SOLID;
-      break;
-    default:
-      bg_col = BG_BLACK;
-      fg_col = FG_BLACK;
-      sym = PIXEL_SOLID;
-    }
-
-    CHAR_INFO c;
-    c.colour = bg_col | fg_col;
-    c.glyph = sym;
-    return c;
-  }
-
 public:
   bool OnUserCreate() override {
-    /*
-    meshCube.tris = {
-
-        // SOUTH
-        {0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-
-        // EAST
-        {1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
-
-        // NORTH
-        {1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f},
-        {1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
-
-        // WEST
-        {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-
-        // TOP
-        {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f},
-
-        // BOTTOM
-        {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f},
-        {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-
-    };
-    */
-
     mMesh.loadObj("ship.obj");
 
-    float fNear = 0.1f;
-    float fFar = 1000.0f;
-    float fFov = 90.0f;
-    float fAspectRatio = (float)ScreenHeight() / (float)ScreenWidth();
-    float fFovRad = 1.0f / tanf(fFov * 0.5f / 180.0f * 3.141592f);
-
-    matProj.m[0][0] = fAspectRatio * fFovRad;
-    matProj.m[1][1] = fFovRad;
-    matProj.m[2][2] = fFar / (fFar - fNear);
-    matProj.m[3][2] = (-fFar * fNear) / (fFar - fNear);
-    matProj.m[2][3] = 1.0f;
-    matProj.m[3][3] = 0.0f;
+    matProj.projection(90.0f,
+                       static_cast<float>(ScreenHeight()) /
+                           static_cast<float>(ScreenWidth()),
+                       0.1f, 1000.0f);
 
     return true;
   }
 
   bool OnUserUpdate(float fElapsedTime) override {
-    Fill(0, 0, ScreenWidth(), ScreenHeight(), PIXEL_SOLID, FG_BLACK);
-
-    mat4 matRotZ, matRotX;
-
     fTheta += 1.0f * fElapsedTime;
 
-    // Rotation Z
-    matRotZ.m[0][0] = cosf(fTheta);
-    matRotZ.m[0][1] = sinf(fTheta);
-    matRotZ.m[1][0] = -sinf(fTheta);
-    matRotZ.m[1][1] = cosf(fTheta);
-    matRotZ.m[2][2] = 1;
-    matRotZ.m[3][3] = 1;
+    Fill(0, 0, ScreenWidth(), ScreenHeight(), PIXEL_SOLID, FG_BLACK);
 
-    // Rotation X
-    matRotX.m[0][0] = 1;
-    matRotX.m[1][1] = cosf(fTheta * 0.5f);
-    matRotX.m[1][2] = sinf(fTheta * 0.5f);
-    matRotX.m[2][1] = -sinf(fTheta * 0.5f);
-    matRotX.m[2][2] = cosf(fTheta * 0.5f);
-    matRotX.m[3][3] = 1;
+    // Make rotation matrices
+    mat4 matRotZ, matRotX;
+    matRotZ.rotation_z(fTheta * 0.5f);
+    matRotX.rotation_x(fTheta);
 
+    // Make translation matrix
+    mat4 matTrans;
+    matTrans.translation(0.0f, 0.0f, 16.0f);
+
+    // Make world matrix
+    mat4 matWorld;
+    matWorld.identity();
+    matWorld = matRotZ * matRotX;
+    matWorld = matWorld * matTrans;
+
+    // Make vector of trinagles to raster
     std::vector<triangle> vecTriangleToRaster;
     vecTriangleToRaster.reserve(RESERVE_RAST_TRIS);
 
     // Draw triangles
-    for (triangle tri : mMesh.tris) {
-      triangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
+    for (triangle &tri : mMesh.tris) {
+      triangle triProjected, triTransformed;
 
       // Rotate triangles
+      triTransformed.p[0] = tri.p[0] * matWorld;
+      triTransformed.p[1] = tri.p[1] * matWorld;
+      triTransformed.p[2] = tri.p[2] * matWorld;
 
-      // Rotate Z
-      MultiplyMatrixVector(tri.p[0], triRotatedZ.p[0], matRotZ);
-      MultiplyMatrixVector(tri.p[1], triRotatedZ.p[1], matRotZ);
-      MultiplyMatrixVector(tri.p[2], triRotatedZ.p[2], matRotZ);
-
-      // Rotate X
-      MultiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
-      MultiplyMatrixVector(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
-      MultiplyMatrixVector(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
-
-      // Translate triangles
-      triTranslated = triRotatedZX;
-      triTranslated.p[0].z = triTranslated.p[0].z + 8.0f;
-      triTranslated.p[1].z = triTranslated.p[1].z + 8.0f;
-      triTranslated.p[2].z = triTranslated.p[2].z + 8.0f;
-
-      // Check if side is visible
+      // Calculate triangle normal
       vec3d normal, line1, line2;
 
-      line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
-      line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
-      line1.z = triTranslated.p[1].z - triTranslated.p[0].z;
+      // Get either side of triangle
+      line1 = triTransformed.p[1] - triTransformed.p[0];
+      line2 = triTransformed.p[2] - triTransformed.p[0];
 
-      line2.x = triTranslated.p[2].x - triTranslated.p[0].x;
-      line2.y = triTranslated.p[2].y - triTranslated.p[0].y;
-      line2.z = triTranslated.p[2].z - triTranslated.p[0].z;
+      // Take cross product to get normal
+      normal = line1.cross_product(line2);
+      normal.normalize();
 
-      normal.x = line1.y * line2.z - line1.z * line2.y;
-      normal.y = line1.z * line2.x - line1.x * line2.z;
-      normal.z = line1.x * line2.y - line1.y * line2.x;
+      // Get ray from triangle to camera
+      vec3d vCameraRay = triTransformed.p[0] - vCamera;
 
-      float l = sqrt(pow(normal.x, 2) + pow(normal.y, 2) + pow(normal.z, 2));
-      normal.x /= l;
-      normal.y /= l;
-      normal.z /= l;
+      // If ray is alligned with normal then triangle is visible
+      if (normal.dot_product(vCameraRay) < 0.0f) {
+        // Set and normalize light direction
+        vec3d light_direction = {0.0f, 1.0f, -1.0f};
+        light_direction.normalize();
 
-      if ((normal.x * (triTranslated.p[0].x - vCamera.x) +
-           normal.y * (triTranslated.p[0].y - vCamera.y) +
-           normal.z * (triTranslated.p[0].z - vCamera.z)) < 0.0f) {
-
-        // Add basic lighting
-        vec3d light_direction = {0.0f, 0.0f, -1.0f};
-
-        float l = sqrt(pow(light_direction.x, 2) + pow(light_direction.y, 2) +
-                       pow(light_direction.z, 2));
-        light_direction.x /= l;
-        light_direction.y /= l;
-        light_direction.z /= l;
-
-        float dp = normal.x * light_direction.x + normal.y * light_direction.y +
-                   normal.z * light_direction.z;
+        // How alligned are trangle surface normal and light direction
+        float dp = std::max(0.1f, light_direction.dot_product(normal));
 
         CHAR_INFO c = GetColour(dp);
-        triTranslated.col = c.colour;
-        triTranslated.sym = c.glyph;
+        triTransformed.col = c.colour;
+        triTransformed.sym = c.glyph;
 
         // Project trinagles from 3D to 2D
-        MultiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);
-        MultiplyMatrixVector(triTranslated.p[1], triProjected.p[1], matProj);
-        MultiplyMatrixVector(triTranslated.p[2], triProjected.p[2], matProj);
-        triProjected.col = triTranslated.col;
-        triProjected.sym = triTranslated.sym;
+        triProjected.p[0] = triTransformed.p[0] * matProj;
+        triProjected.p[1] = triTransformed.p[1] * matProj;
+        triProjected.p[2] = triTransformed.p[2] * matProj;
+        triProjected.col = triTransformed.col;
+        triProjected.sym = triTransformed.sym;
+
+        triProjected.p[0] /= triProjected.p[0].w;
+        triProjected.p[1] /= triProjected.p[1].w;
+        triProjected.p[2] /= triProjected.p[2].w;
 
         // Scale into view
-        triProjected.p[0].x += 1.0f;
-        triProjected.p[0].y += 1.0f;
-        triProjected.p[1].x += 1.0f;
-        triProjected.p[1].y += 1.0f;
-        triProjected.p[2].x += 1.0f;
-        triProjected.p[2].y += 1.0f;
+        vec3d vOffsetView = {1.0f, 1.0f, 0.0f};
+        triProjected.p[0] += vOffsetView;
+        triProjected.p[1] += vOffsetView;
+        triProjected.p[2] += vOffsetView;
 
         triProjected.p[0].x *= 0.5f * (float)ScreenWidth();
         triProjected.p[1].x *= 0.5f * (float)ScreenWidth();
