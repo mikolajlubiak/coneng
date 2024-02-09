@@ -415,7 +415,7 @@ public:
 
       // Get either side of triangle
       line1 = triTransformed.p[1] - triTransformed.p[0];
-      line1 = triTransformed.p[2] - triTransformed.p[0];
+      line2 = triTransformed.p[2] - triTransformed.p[0];
 
       // Take cross product to get normal
       normal = line1.cross_product(line2);
