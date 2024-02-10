@@ -10,84 +10,6 @@
 #define RESERVE_TRIS RESERVE_VERTS * 2
 #define RESERVE_RAST_TRIS RESERVE_TRIS / 4
 
-struct mat4 {
-  float m[4][4] = {{0.0f}};
-
-  void identity() {
-    this->m[0][0] = 1.0f;
-    this->m[1][1] = 1.0f;
-    this->m[2][2] = 1.0f;
-    this->m[3][3] = 1.0f;
-  }
-
-  void rotation_x(float fAngleRad) {
-    this->m[0][0] = 1.0f;
-    this->m[3][3] = 1.0f;
-    this->m[1][1] = cosf(fAngleRad);
-    this->m[2][2] = cosf(fAngleRad);
-    this->m[1][2] = sinf(fAngleRad);
-    this->m[2][1] = -sinf(fAngleRad);
-  }
-
-  void rotation_y(float fAngleRad) {
-    this->m[1][1] = 1.0f;
-    this->m[3][3] = 1.0f;
-    this->m[0][0] = cosf(fAngleRad);
-    this->m[2][2] = cosf(fAngleRad);
-    this->m[0][2] = sinf(fAngleRad);
-    this->m[2][0] = -sinf(fAngleRad);
-  }
-
-  void rotation_z(float fAngleRad) {
-    this->m[2][2] = 1.0f;
-    this->m[3][3] = 1.0f;
-    this->m[0][0] = cosf(fAngleRad);
-    this->m[1][1] = cosf(fAngleRad);
-    this->m[0][1] = sinf(fAngleRad);
-    this->m[1][0] = -sinf(fAngleRad);
-  }
-
-  void translation(float x, float y, float z) {
-    this->m[0][0] = 1.0f;
-    this->m[1][1] = 1.0f;
-    this->m[2][2] = 1.0f;
-    this->m[3][3] = 1.0f;
-    this->m[3][0] = x;
-    this->m[3][1] = y;
-    this->m[3][2] = z;
-  }
-
-  void projection(float fFovDegrees, float fAspectRatio, float fNear,
-                  float fFar) {
-    float fFovRad = 1.0f / tanf(fFovDegrees * 0.5f / 180.0f * 3.14159f);
-    this->m[0][0] = fAspectRatio * fFovRad;
-    this->m[1][1] = fFovRad;
-    this->m[2][2] = fFar / (fFar - fNear);
-    this->m[3][2] = (-fFar * fNear) / (fFar - fNear);
-    this->m[2][3] = 1.0f;
-    this->m[3][3] = 0.0f;
-  }
-
-  mat4 operator*=(const mat4 &other) {
-    mat4 matrix;
-    for (int c = 0; c < 4; c++)
-      for (int r = 0; r < 4; r++)
-        matrix.m[r][c] =
-            this->m[r][0] * other.m[0][c] + this->m[r][1] * other.m[1][c] +
-            this->m[r][2] * other.m[2][c] + this->m[r][3] * other.m[3][c];
-    return matrix;
-  }
-};
-
-mat4 operator*(const mat4 &lhs, const mat4 &rhs) {
-  mat4 matrix;
-  for (int c = 0; c < 4; c++)
-    for (int r = 0; r < 4; r++)
-      matrix.m[r][c] = lhs.m[r][0] * rhs.m[0][c] + lhs.m[r][1] * rhs.m[1][c] +
-                       lhs.m[r][2] * rhs.m[2][c] + lhs.m[r][3] * rhs.m[3][c];
-  return matrix;
-}
-
 struct vec3d {
   float x, y, z = 0.0f;
   float w = 1.0f;
@@ -149,20 +71,163 @@ struct vec3d {
         (this->x * other.y - this->y * other.x),
     };
   }
+};
 
-  vec3d operator*=(const mat4 &m) {
-    vec3d v;
-    v.x = this->x * m.m[0][0] + this->y * m.m[1][0] + this->z * m.m[2][0] +
-          this->w * m.m[3][0];
-    v.y = this->x * m.m[0][1] + this->y * m.m[1][1] + this->z * m.m[2][1] +
-          this->w * m.m[3][1];
-    v.z = this->x * m.m[0][2] + this->y * m.m[1][2] + this->z * m.m[2][2] +
-          this->w * m.m[3][2];
-    v.w = this->x * m.m[0][3] + this->y * m.m[1][3] + this->z * m.m[2][3] +
-          this->w * m.m[3][3];
-    return v;
+vec3d operator-(vec3d lhs, const vec3d &rhs) {
+  lhs.x -= rhs.x;
+  lhs.y -= rhs.y;
+  lhs.z -= rhs.z;
+  return lhs;
+}
+
+vec3d operator+(vec3d lhs, const vec3d &rhs) {
+  lhs.x += rhs.x;
+  lhs.y += rhs.y;
+  lhs.z += rhs.z;
+  return lhs;
+}
+
+vec3d operator*(vec3d lhs, float rhs) {
+  lhs.x *= rhs;
+  lhs.y *= rhs;
+  lhs.z *= rhs;
+  return lhs;
+}
+
+struct mat4 {
+  float m[4][4] = {{0.0f}};
+
+  void identity() {
+    this->m[0][0] = 1.0f;
+    this->m[1][1] = 1.0f;
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+  }
+
+  void rotation_x(float fAngleRad) {
+    this->m[0][0] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[1][1] = cosf(fAngleRad);
+    this->m[2][2] = cosf(fAngleRad);
+    this->m[1][2] = sinf(fAngleRad);
+    this->m[2][1] = -sinf(fAngleRad);
+  }
+
+  void rotation_y(float fAngleRad) {
+    this->m[1][1] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[0][0] = cosf(fAngleRad);
+    this->m[2][2] = cosf(fAngleRad);
+    this->m[0][2] = sinf(fAngleRad);
+    this->m[2][0] = -sinf(fAngleRad);
+  }
+
+  void rotation_z(float fAngleRad) {
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[0][0] = cosf(fAngleRad);
+    this->m[1][1] = cosf(fAngleRad);
+    this->m[0][1] = sinf(fAngleRad);
+    this->m[1][0] = -sinf(fAngleRad);
+  }
+
+  void translation(float x, float y, float z) {
+    this->m[0][0] = 1.0f;
+    this->m[1][1] = 1.0f;
+    this->m[2][2] = 1.0f;
+    this->m[3][3] = 1.0f;
+    this->m[3][0] = x;
+    this->m[3][1] = y;
+    this->m[3][2] = z;
+  }
+
+  void projection(float fFovDegrees, float fAspectRatio, float fNear,
+                  float fFar) {
+    float fFovRad = 1.0f / tanf(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+    this->m[0][0] = fAspectRatio * fFovRad;
+    this->m[1][1] = fFovRad;
+    this->m[2][2] = fFar / (fFar - fNear);
+    this->m[3][2] = (-fFar * fNear) / (fFar - fNear);
+    this->m[2][3] = 1.0f;
+    this->m[3][3] = 0.0f;
+  }
+
+  void point_at(const vec3d &pos, vec3d &target, vec3d &up) {
+    target = target - pos;
+    target.normalize();
+
+    vec3d a = target * up.dot_product(target);
+    up = up - a;
+    up.normalize();
+
+    vec3d newRight = up.cross_product(target);
+
+    mat4 matrix;
+    matrix.m[0][0] = newRight.x;
+    matrix.m[0][1] = newRight.y;
+    matrix.m[0][2] = newRight.z;
+    matrix.m[0][3] = 0.0f;
+    matrix.m[1][0] = up.x;
+    matrix.m[1][1] = up.y;
+    matrix.m[1][2] = up.z;
+    matrix.m[1][3] = 0.0f;
+    matrix.m[2][0] = target.x;
+    matrix.m[2][1] = target.y;
+    matrix.m[2][2] = target.z;
+    matrix.m[2][3] = 0.0f;
+    matrix.m[3][0] = pos.x;
+    matrix.m[3][1] = pos.y;
+    matrix.m[3][2] = pos.z;
+    matrix.m[3][3] = 1.0f;
+    *this = matrix;
+  }
+
+  void quick_inverse() {
+    mat4 matrix;
+    matrix.m[0][0] = this->m[0][0];
+    matrix.m[0][1] = this->m[1][0];
+    matrix.m[0][2] = this->m[2][0];
+    matrix.m[0][3] = 0.0f;
+    matrix.m[1][0] = this->m[0][1];
+    matrix.m[1][1] = this->m[1][1];
+    matrix.m[1][2] = this->m[2][1];
+    matrix.m[1][3] = 0.0f;
+    matrix.m[2][0] = this->m[0][2];
+    matrix.m[2][1] = this->m[1][2];
+    matrix.m[2][2] = this->m[2][2];
+    matrix.m[2][3] = 0.0f;
+    matrix.m[3][0] =
+        -(this->m[3][0] * matrix.m[0][0] + this->m[3][1] * matrix.m[1][0] +
+          this->m[3][2] * matrix.m[2][0]);
+    matrix.m[3][1] =
+        -(this->m[3][0] * matrix.m[0][1] + this->m[3][1] * matrix.m[1][1] +
+          this->m[3][2] * matrix.m[2][1]);
+    matrix.m[3][2] =
+        -(this->m[3][0] * matrix.m[0][2] + this->m[3][1] * matrix.m[1][2] +
+          this->m[3][2] * matrix.m[2][2]);
+    matrix.m[3][3] = 1.0f;
+    *this = matrix;
+  }
+
+  mat4 operator*=(const mat4 &other) {
+    mat4 matrix;
+    for (int c = 0; c < 4; c++)
+      for (int r = 0; r < 4; r++)
+        matrix.m[r][c] =
+            this->m[r][0] * other.m[0][c] + this->m[r][1] * other.m[1][c] +
+            this->m[r][2] * other.m[2][c] + this->m[r][3] * other.m[3][c];
+    return matrix;
   }
 };
+
+mat4 operator*(const mat4 &lhs, const mat4 &rhs) {
+  mat4 matrix;
+  for (int c = 0; c < 4; c++)
+    for (int r = 0; r < 4; r++)
+      matrix.m[r][c] = lhs.m[r][0] * rhs.m[0][c] + lhs.m[r][1] * rhs.m[1][c] +
+                       lhs.m[r][2] * rhs.m[2][c] + lhs.m[r][3] * rhs.m[3][c];
+  return matrix;
+}
 
 vec3d operator*(const vec3d &lhs, const mat4 &rhs) {
   vec3d v;
@@ -175,13 +240,6 @@ vec3d operator*(const vec3d &lhs, const mat4 &rhs) {
   v.w = lhs.x * rhs.m[0][3] + lhs.y * rhs.m[1][3] + lhs.z * rhs.m[2][3] +
         lhs.w * rhs.m[3][3];
   return v;
-}
-
-vec3d operator-(vec3d lhs, const vec3d &rhs) {
-  lhs.x -= rhs.x;
-  lhs.y -= rhs.y;
-  lhs.z -= rhs.z;
-  return lhs;
 }
 
 struct triangle {
@@ -362,14 +420,15 @@ private:
   mat4 matProj;
 
   vec3d vCamera;
+  vec3d vLookDir;
 
-  float fTheta;
+  float fYaw;
 
 public:
   bool OnUserCreate() override {
-    mMesh.loadObj("ship.obj");
+    mMesh.loadObj("axis.obj");
 
-    matProj.projection(90.0f,
+    matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
                            static_cast<float>(ScreenWidth()),
                        0.1f, 1000.0f);
@@ -378,14 +437,26 @@ public:
   }
 
   bool OnUserUpdate(float fElapsedTime) override {
-    fTheta += 1.0f * fElapsedTime;
+    if (GetKey(VK_UP).bHeld)
+      vCamera.y += 8.0f * fElapsedTime;
+    if (GetKey(VK_DOWN).bHeld)
+      vCamera.y -= 8.0f * fElapsedTime;
+    if (GetKey(VK_LEFT).bHeld)
+      vCamera.x += 8.0f * fElapsedTime;
+    if (GetKey(VK_RIGHT).bHeld)
+      vCamera.x -= 8.0f * fElapsedTime;
+
+    vec3d vForward = vLookDir * (8.0f * fElapsedTime);
+    if (GetKey(L'W').bHeld)
+      vCamera += vForward;
+    if (GetKey(L'S').bHeld)
+      vCamera -= vForward;
+    if (GetKey(L'A').bHeld)
+      fYaw -= 2.0f * fElapsedTime;
+    if (GetKey(L'D').bHeld)
+      fYaw += 2.0f * fElapsedTime;
 
     Fill(0, 0, ScreenWidth(), ScreenHeight(), PIXEL_SOLID, FG_BLACK);
-
-    // Make rotation matrices
-    mat4 matRotZ, matRotX;
-    matRotZ.rotation_z(fTheta * 0.5f);
-    matRotX.rotation_x(fTheta);
 
     // Make translation matrix
     mat4 matTrans;
@@ -394,8 +465,18 @@ public:
     // Make world matrix
     mat4 matWorld;
     matWorld.identity();
-    matWorld = matRotZ * matRotX;
     matWorld = matWorld * matTrans;
+
+    vec3d vUp = {0.0f, 1.0f, 0.0f};
+    vec3d vTarget = {0.0f, 0.0f, 1.0f};
+    mat4 matCameraRot;
+    matCameraRot.rotation_y(fYaw);
+    vLookDir = vTarget * matCameraRot;
+    vTarget = vCamera + vLookDir;
+
+    mat4 matCamera;
+    matCamera.point_at(vCamera, vTarget, vUp);
+    matCamera.quick_inverse();
 
     // Make vector of trinagles to raster
     std::vector<triangle> vecTriangleToRaster;
@@ -403,7 +484,7 @@ public:
 
     // Draw triangles
     for (triangle &tri : mMesh.tris) {
-      triangle triProjected, triTransformed;
+      triangle triProjected, triTransformed, triViewed;
 
       // Rotate triangles
       triTransformed.p[0] = tri.p[0] * matWorld;
@@ -434,15 +515,18 @@ public:
         float dp = std::max(0.1f, light_direction.dot_product(normal));
 
         CHAR_INFO c = GetColour(dp);
-        triTransformed.col = c.colour;
-        triTransformed.sym = c.glyph;
+
+        // Move triangles from world space to view space
+        triViewed.p[0] = triTransformed.p[0] * matCamera;
+        triViewed.p[1] = triTransformed.p[1] * matCamera;
+        triViewed.p[2] = triTransformed.p[2] * matCamera;
 
         // Project trinagles from 3D to 2D
-        triProjected.p[0] = triTransformed.p[0] * matProj;
-        triProjected.p[1] = triTransformed.p[1] * matProj;
-        triProjected.p[2] = triTransformed.p[2] * matProj;
-        triProjected.col = triTransformed.col;
-        triProjected.sym = triTransformed.sym;
+        triProjected.p[0] = triViewed.p[0] * matProj;
+        triProjected.p[1] = triViewed.p[1] * matProj;
+        triProjected.p[2] = triViewed.p[2] * matProj;
+        triProjected.col = c.colour;
+        triProjected.sym = c.glyph;
 
         triProjected.p[0] /= triProjected.p[0].w;
         triProjected.p[1] /= triProjected.p[1].w;
