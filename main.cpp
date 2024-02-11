@@ -3,16 +3,25 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <ostream>
 #include <strstream>
 #include <vector>
 
 #define RESERVE_VERTS 64
 #define RESERVE_TRIS RESERVE_VERTS * 2
 #define RESERVE_RAST_TRIS RESERVE_TRIS / 4
+#define NEAR_PLANE 0.1f
 
 struct vec3d {
-  float x, y, z = 0.0f;
-  float w = 1.0f;
+  float x, y, z;
+  float w;
+
+  vec3d() : x(0.0f), y(0.0f), z(0.0f), w(1.0f) {}
+
+  vec3d(float x) : x(x), y(x), z(x), w(1.0f) {}
+
+  vec3d(const float x, const float y, const float z)
+      : x(x), y(y), z(z), w(1.0f) {}
 
   vec3d &operator+=(const vec3d &other) {
     this->x += other.x;
@@ -71,6 +80,9 @@ struct vec3d {
         (this->x * other.y - this->y * other.x),
     };
   }
+
+  vec3d intersect_plane(vec3d &plane_p, vec3d &plane_n, vec3d &lineStart,
+                        vec3d &lineEnd);
 };
 
 vec3d operator-(vec3d lhs, const vec3d &rhs) {
@@ -92,6 +104,18 @@ vec3d operator*(vec3d lhs, float rhs) {
   lhs.y *= rhs;
   lhs.z *= rhs;
   return lhs;
+}
+
+vec3d vector_intersect_plane(vec3d &plane_p, vec3d &plane_n, vec3d &lineStart,
+                             vec3d &lineEnd) {
+  plane_n.normalize();
+  float plane_d = -plane_n.dot_product(plane_p);
+  float ad = lineStart.dot_product(plane_n);
+  float bd = lineEnd.dot_product(plane_n);
+  float t = (-plane_d - ad) / (bd - ad);
+  vec3d lineStartToEnd = lineEnd - lineStart;
+  vec3d lineToIntersect = lineStartToEnd * t;
+  return lineStart + lineToIntersect;
 }
 
 struct mat4 {
@@ -245,10 +269,18 @@ vec3d operator*(const vec3d &lhs, const mat4 &rhs) {
 struct triangle {
   vec3d p[3];
 
-  wchar_t sym = PIXEL_SOLID;
-  short col = FG_WHITE;
+  wchar_t sym;
+  short col;
 
-#ifdef DEBUG
+  triangle() : p{0.0f}, sym(PIXEL_SOLID), col(FG_WHITE) {}
+
+  triangle(const vec3d &x, const vec3d &y, const vec3d &z) : p{x, y, z} {}
+
+  triangle(const vec3d &x, const vec3d &y, const vec3d &z, const wchar_t glyph,
+           const short colour)
+      : p{x, y, z}, sym(glyph), col(colour) {}
+
+#ifdef OPTIM_DEBUG
   triangle &operator=(const triangle &other) {
     p[0] = other.p[0];
     p[1] = other.p[1];
@@ -287,6 +319,124 @@ struct triangle {
     this->p[2] /= other.p[2];
     return *this;
   }
+
+  std::vector<triangle> clip_against_plane(vec3d plane_p, vec3d plane_n) {
+    std::vector<triangle> triangles;
+    triangles.reserve(2);
+    triangle temp;
+
+    // Make sure plane normal is indeed normal
+    plane_n.normalize();
+
+    // Return signed shortest distance from point to plane, plane normal must be
+    // normalised
+    auto dist = [&](vec3d &p) {
+      return (plane_n.x * p.x + plane_n.y * p.y + plane_n.z * p.z -
+              plane_n.dot_product(plane_p));
+    };
+
+    // Create two temporary storage arrays to classify points either side of
+    // plane If distance sign is positive, point lies on "inside" of plane
+    vec3d *inside_points[3];
+    int nInsidePointCount = 0;
+    vec3d *outside_points[3];
+    int nOutsidePointCount = 0;
+
+    // Get signed distance of each point in triangle to plane
+    float d0 = dist(this->p[0]);
+    float d1 = dist(this->p[1]);
+    float d2 = dist(this->p[2]);
+
+    if (d0 >= 0) {
+      inside_points[nInsidePointCount++] = &this->p[0];
+    } else {
+      outside_points[nOutsidePointCount++] = &this->p[0];
+    }
+    if (d1 >= 0) {
+      inside_points[nInsidePointCount++] = &this->p[1];
+    } else {
+      outside_points[nOutsidePointCount++] = &this->p[1];
+    }
+    if (d2 >= 0) {
+      inside_points[nInsidePointCount++] = &this->p[2];
+    } else {
+      outside_points[nOutsidePointCount++] = &this->p[2];
+    }
+
+    // Now classify triangle points, and break the input triangle into
+    // smaller output triangles if required. There are four possible
+    // outcomes...
+
+    if (nInsidePointCount == 3) {
+      // All points lie on the inside of plane, so do nothing
+      // and allow the triangle to simply pass through
+      triangles.emplace_back(*this);
+    }
+
+    if (nInsidePointCount == 1 && nOutsidePointCount == 2) {
+      // Triangle should be clipped. As two points lie outside
+      // the plane, the triangle simply becomes a smaller triangle
+
+      // Copy appearance info to new triangle
+#ifdef DEBUG
+      temp.col = FG_BLUE;
+#else
+      temp.col = this->col;
+#endif
+      temp.sym = this->sym;
+
+      // The inside point is valid, so keep that...
+      temp.p[0] = *inside_points[0];
+
+      // but the two new points are at the locations where the
+      // original sides of the triangle (lines) intersect with the plane
+      temp.p[1] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
+                                         *outside_points[0]);
+      temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
+                                         *outside_points[1]);
+
+      triangles.emplace_back(temp);
+    }
+
+    if (nInsidePointCount == 2 && nOutsidePointCount == 1) {
+      // Triangle should be clipped. As two points lie inside the plane,
+      // the clipped triangle becomes a "quad". Fortunately, we can
+      // represent a quad with two new triangles
+
+      // Copy appearance info to new triangles
+#ifdef DEBUG
+      temp.col = FG_GREEN;
+#else
+      temp.col = this->col;
+#endif
+      temp.sym = this->sym;
+
+      // The first triangle consists of the two inside points and a new
+      // point determined by the location where one side of the triangle
+      // intersects with the plane
+      temp.p[0] = *inside_points[0];
+      temp.p[1] = *inside_points[1];
+      temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
+                                         *outside_points[0]);
+
+      triangles.emplace_back(temp);
+
+#ifdef DEBUG
+      temp.col = FG_RED;
+#endif
+
+      // The second triangle is composed of one of he inside points, a
+      // new point determined by the intersection of the other side of the
+      // triangle and the plane, and the newly created point above
+      temp.p[0] = *inside_points[1];
+      temp.p[1] = temp.p[2];
+      temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[1],
+                                         *outside_points[0]);
+
+      triangles.emplace_back(temp);
+    }
+    return triangles;
+  }
 };
 
 struct mesh {
@@ -318,7 +468,7 @@ struct mesh {
       } else if (line[0] == 'f') {
         int f[3];
         s >> junk >> f[0] >> f[1] >> f[2];
-        tris.push_back({{verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]}});
+        tris.emplace_back(verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]);
       }
     }
 
@@ -329,7 +479,7 @@ struct mesh {
 CHAR_INFO GetColour(float lum) {
   short bg_col, fg_col;
   wchar_t sym;
-  int pixel_bw = (int)(13.0f * lum);
+  int pixel_bw = static_cast<int>(13.0f * lum);
   switch (pixel_bw) {
   case 0:
     bg_col = BG_BLACK;
@@ -426,12 +576,12 @@ private:
 
 public:
   bool OnUserCreate() override {
-    mMesh.loadObj("axis.obj");
+    mMesh.loadObj("mountains.obj");
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
                            static_cast<float>(ScreenWidth()),
-                       0.1f, 1000.0f);
+                       NEAR_PLANE, 1000.0f);
 
     return true;
   }
@@ -507,45 +657,54 @@ public:
 
       // If ray is alligned with normal then triangle is visible
       if (normal.dot_product(vCameraRay) < 0.0f) {
-        // Set and normalize light direction
-        vec3d light_direction = {0.0f, 1.0f, -1.0f};
-        light_direction.normalize();
-
-        // How alligned are trangle surface normal and light direction
-        float dp = std::max(0.1f, light_direction.dot_product(normal));
-
-        CHAR_INFO c = GetColour(dp);
-
         // Move triangles from world space to view space
         triViewed.p[0] = triTransformed.p[0] * matCamera;
         triViewed.p[1] = triTransformed.p[1] * matCamera;
         triViewed.p[2] = triTransformed.p[2] * matCamera;
 
-        // Project trinagles from 3D to 2D
-        triProjected.p[0] = triViewed.p[0] * matProj;
-        triProjected.p[1] = triViewed.p[1] * matProj;
-        triProjected.p[2] = triViewed.p[2] * matProj;
-        triProjected.col = c.colour;
-        triProjected.sym = c.glyph;
+        // Clip triViewed against near plane
+        std::vector<triangle> clipped = triViewed.clip_against_plane(
+            {0.0f, 0.0f, NEAR_PLANE}, {0.0f, 0.0f, 1.0f});
 
-        triProjected.p[0] /= triProjected.p[0].w;
-        triProjected.p[1] /= triProjected.p[1].w;
-        triProjected.p[2] /= triProjected.p[2].w;
+        CHAR_INFO c;
+        if (clipped.size()) {
+          // Set and normalize light direction
+          vec3d light_direction = {0.0f, 1.0f, -1.0f};
+          light_direction.normalize();
 
-        // Scale into view
-        vec3d vOffsetView = {1.0f, 1.0f, 0.0f};
-        triProjected.p[0] += vOffsetView;
-        triProjected.p[1] += vOffsetView;
-        triProjected.p[2] += vOffsetView;
+          // How alligned are trangle surface normal and light direction
+          float dp = std::max(0.1f, light_direction.dot_product(normal));
 
-        triProjected.p[0].x *= 0.5f * (float)ScreenWidth();
-        triProjected.p[1].x *= 0.5f * (float)ScreenWidth();
-        triProjected.p[2].x *= 0.5f * (float)ScreenWidth();
-        triProjected.p[0].y *= 0.5f * (float)ScreenHeight();
-        triProjected.p[1].y *= 0.5f * (float)ScreenHeight();
-        triProjected.p[2].y *= 0.5f * (float)ScreenHeight();
+          c = GetColour(dp);
+        }
 
-        vecTriangleToRaster.emplace_back(triProjected);
+        for (size_t i = 0; i < clipped.size(); i++) {
+          // Project trinagles from 3D to 2D
+          triProjected.p[0] = clipped[i].p[0] * matProj;
+          triProjected.p[1] = clipped[i].p[1] * matProj;
+          triProjected.p[2] = clipped[i].p[2] * matProj;
+          triProjected.col = c.colour;
+          triProjected.sym = c.glyph;
+
+          triProjected.p[0] /= triProjected.p[0].w;
+          triProjected.p[1] /= triProjected.p[1].w;
+          triProjected.p[2] /= triProjected.p[2].w;
+
+          // Scale into view
+          vec3d vOffsetView = {1.0f, 1.0f, 0.0f};
+          triProjected.p[0] += vOffsetView;
+          triProjected.p[1] += vOffsetView;
+          triProjected.p[2] += vOffsetView;
+
+          triProjected.p[0].x *= 0.5f * static_cast<float>(ScreenWidth());
+          triProjected.p[1].x *= 0.5f * static_cast<float>(ScreenWidth());
+          triProjected.p[2].x *= 0.5f * static_cast<float>(ScreenWidth());
+          triProjected.p[0].y *= 0.5f * static_cast<float>(ScreenHeight());
+          triProjected.p[1].y *= 0.5f * static_cast<float>(ScreenHeight());
+          triProjected.p[2].y *= 0.5f * static_cast<float>(ScreenHeight());
+
+          vecTriangleToRaster.emplace_back(triProjected);
+        }
       }
     }
 
@@ -557,17 +716,70 @@ public:
                 return z1 > z2;
               });
 
-    for (triangle &triProjected : vecTriangleToRaster) {
-      FillTriangle(triProjected.p[0].x, triProjected.p[0].y,
-                   triProjected.p[1].x, triProjected.p[1].y,
-                   triProjected.p[2].x, triProjected.p[2].y, triProjected.sym,
-                   triProjected.col);
+    for (triangle &triToRaster : vecTriangleToRaster) {
+      // Clip triangles against all four screen edges, this could yield
+      // a bunch of triangles, so create a queue that we traverse to
+      //  ensure we only test new triangles generated against planes
+      std::vector<triangle> clipped;
+      clipped.reserve(2);
+      std::list<triangle> listTriangles;
+
+      // Add initial triangle
+      listTriangles.push_back(triToRaster);
+      int nNewTriangles = 1;
+
+      for (int p = 0; p < 4; p++) {
+        while (nNewTriangles > 0) {
+          // Take triangle from front of queue
+          triangle test = listTriangles.front();
+          listTriangles.pop_front();
+          nNewTriangles--;
+
+          // Clip it against a plane. We only need to test each
+          // subsequent plane, against subsequent new triangles
+          // as all triangles after a plane clip are guaranteed
+          // to lie on the inside of the plane. I like how this
+          // comment is almost completely and utterly justified
+          switch (p) {
+          case 0:
+            clipped =
+                test.clip_against_plane({0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+            break;
+          case 1:
+            clipped = test.clip_against_plane(
+                {0.0f, static_cast<float>(ScreenHeight()) - 1, 0.0f},
+                {0.0f, -1.0f, 0.0f});
+            break;
+          case 2:
+            clipped =
+                test.clip_against_plane({0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f});
+            break;
+          case 3:
+            clipped = test.clip_against_plane(
+                {static_cast<float>(ScreenWidth()) - 1, 0.0f, 0.0f},
+                {-1.0f, 0.0f, 0.0f});
+            break;
+          }
+
+          // Clipping may yield a variable number of triangles, so
+          // add these new ones to the back of the queue for subsequent
+          // clipping against next planes
+          for (size_t w = 0; w < clipped.size(); w++)
+            listTriangles.push_back(clipped[w]);
+        }
+        nNewTriangles = listTriangles.size();
+      }
+
+      // Draw the transformed, viewed, clipped, projected, sorted, clipped
+      // triangles
+      for (auto &t : listTriangles) {
+        FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
+                     t.sym, t.col);
 #ifdef DEBUG
-      DrawTriangle(triProjected.p[0].x, triProjected.p[0].y,
-                   triProjected.p[1].x, triProjected.p[1].y,
-                   triProjected.p[2].x, triProjected.p[2].y, PIXEL_SOLID,
-                   FG_WHITE);
+        DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
+                     PIXEL_SOLID, FG_BLACK);
 #endif
+      }
     }
 
     return true;

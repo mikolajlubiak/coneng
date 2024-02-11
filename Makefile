@@ -1,7 +1,7 @@
 SRC_FILES := $(shell find -name *.cpp)
 LDFLAGS :=  -lSDL2 -lpthread
 CXXFLAGS := -Wall -Wextra -pedantic
-DEBUGFLAGS := --debug
+DEBUGFLAGS := --debug -DDEBUG
 RELEASEFLAGS := -O3 -march=native -mtune=native
 
 
