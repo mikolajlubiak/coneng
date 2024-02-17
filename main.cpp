@@ -1,10 +1,12 @@
 #include "olcConsoleGameEngineSDL.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <ostream>
 #include <strstream>
+#include <utility>
 #include <vector>
 
 #define RESERVE_VERTS 64
@@ -12,16 +14,27 @@
 #define RESERVE_RAST_TRIS RESERVE_TRIS / 4
 #define NEAR_PLANE 0.1f
 
+struct vec2d {
+  float u;
+  float v;
+  vec2d() : u(0.0f), v(0.0f) {}
+  vec2d(const float x) : u(x), v(x) {}
+  vec2d(const float u, const float v) : u(u), v(v) {}
+};
+
 struct vec3d {
   float x, y, z;
   float w;
 
   vec3d() : x(0.0f), y(0.0f), z(0.0f), w(1.0f) {}
 
-  vec3d(float x) : x(x), y(x), z(x), w(1.0f) {}
+  vec3d(const float x) : x(x), y(x), z(x), w(1.0f) {}
 
   vec3d(const float x, const float y, const float z)
       : x(x), y(y), z(z), w(1.0f) {}
+
+  vec3d(const float x, const float y, const float z, const float w)
+      : x(x), y(y), z(z), w(w) {}
 
   vec3d &operator+=(const vec3d &other) {
     this->x += other.x;
@@ -65,24 +78,21 @@ struct vec3d {
     return *this;
   }
 
-  float dot_product(const vec3d &other) {
+  float dot_product(const vec3d &other) const {
     return this->x * other.x + this->y * other.y + this->z * other.z;
   }
 
-  float length() { return sqrtf(this->dot_product(*this)); }
+  float length() const { return sqrtf(this->dot_product(*this)); }
 
   void normalize() { *this /= this->length(); }
 
-  vec3d cross_product(const vec3d &other) {
+  vec3d cross_product(const vec3d &other) const {
     return {
         (this->y * other.z - this->z * other.y),
         (this->z * other.x - this->x * other.z),
         (this->x * other.y - this->y * other.x),
     };
   }
-
-  vec3d intersect_plane(vec3d &plane_p, vec3d &plane_n, vec3d &lineStart,
-                        vec3d &lineEnd);
 };
 
 vec3d operator-(vec3d lhs, const vec3d &rhs) {
@@ -99,20 +109,21 @@ vec3d operator+(vec3d lhs, const vec3d &rhs) {
   return lhs;
 }
 
-vec3d operator*(vec3d lhs, float rhs) {
+vec3d operator*(vec3d lhs, const float rhs) {
   lhs.x *= rhs;
   lhs.y *= rhs;
   lhs.z *= rhs;
   return lhs;
 }
 
-vec3d vector_intersect_plane(vec3d &plane_p, vec3d &plane_n, vec3d &lineStart,
-                             vec3d &lineEnd) {
+vec3d vector_intersect_plane(const vec3d &plane_p, vec3d &plane_n,
+                             const vec3d &lineStart, const vec3d &lineEnd,
+                             float &t) {
   plane_n.normalize();
   float plane_d = -plane_n.dot_product(plane_p);
   float ad = lineStart.dot_product(plane_n);
   float bd = lineEnd.dot_product(plane_n);
-  float t = (-plane_d - ad) / (bd - ad);
+  t = (-plane_d - ad) / (bd - ad);
   vec3d lineStartToEnd = lineEnd - lineStart;
   vec3d lineToIntersect = lineStartToEnd * t;
   return lineStart + lineToIntersect;
@@ -186,24 +197,22 @@ struct mat4 {
 
     vec3d newRight = up.cross_product(target);
 
-    mat4 matrix;
-    matrix.m[0][0] = newRight.x;
-    matrix.m[0][1] = newRight.y;
-    matrix.m[0][2] = newRight.z;
-    matrix.m[0][3] = 0.0f;
-    matrix.m[1][0] = up.x;
-    matrix.m[1][1] = up.y;
-    matrix.m[1][2] = up.z;
-    matrix.m[1][3] = 0.0f;
-    matrix.m[2][0] = target.x;
-    matrix.m[2][1] = target.y;
-    matrix.m[2][2] = target.z;
-    matrix.m[2][3] = 0.0f;
-    matrix.m[3][0] = pos.x;
-    matrix.m[3][1] = pos.y;
-    matrix.m[3][2] = pos.z;
-    matrix.m[3][3] = 1.0f;
-    *this = matrix;
+    this->m[0][0] = newRight.x;
+    this->m[0][1] = newRight.y;
+    this->m[0][2] = newRight.z;
+    this->m[0][3] = 0.0f;
+    this->m[1][0] = up.x;
+    this->m[1][1] = up.y;
+    this->m[1][2] = up.z;
+    this->m[1][3] = 0.0f;
+    this->m[2][0] = target.x;
+    this->m[2][1] = target.y;
+    this->m[2][2] = target.z;
+    this->m[2][3] = 0.0f;
+    this->m[3][0] = pos.x;
+    this->m[3][1] = pos.y;
+    this->m[3][2] = pos.z;
+    this->m[3][3] = 1.0f;
   }
 
   void quick_inverse() {
@@ -268,13 +277,18 @@ vec3d operator*(const vec3d &lhs, const mat4 &rhs) {
 
 struct triangle {
   vec3d p[3];
+  vec2d t[3];
 
   wchar_t sym;
   short col;
 
-  triangle() : p{0.0f}, sym(PIXEL_SOLID), col(FG_WHITE) {}
+  triangle() : p(), sym(PIXEL_SOLID), col(FG_WHITE) {}
 
   triangle(const vec3d &x, const vec3d &y, const vec3d &z) : p{x, y, z} {}
+
+  triangle(const vec3d &x, const vec3d &y, const vec3d &z, const vec2d a,
+           const vec2d b, const vec2d c)
+      : p{x, y, z}, t{a, b, c} {}
 
   triangle(const vec3d &x, const vec3d &y, const vec3d &z, const wchar_t glyph,
            const short colour)
@@ -320,7 +334,8 @@ struct triangle {
     return *this;
   }
 
-  std::vector<triangle> clip_against_plane(vec3d plane_p, vec3d plane_n) {
+  std::vector<triangle> clip_against_plane(const vec3d &plane_p,
+                                           vec3d plane_n) {
     std::vector<triangle> triangles;
     triangles.reserve(2);
     triangle temp;
@@ -342,6 +357,11 @@ struct triangle {
     vec3d *outside_points[3];
     int nOutsidePointCount = 0;
 
+    vec2d *inside_tex[3];
+    int nInsideTexCount = 0;
+    vec2d *outside_tex[3];
+    int nOutsideTexCount = 0;
+
     // Get signed distance of each point in triangle to plane
     float d0 = dist(this->p[0]);
     float d1 = dist(this->p[1]);
@@ -349,18 +369,24 @@ struct triangle {
 
     if (d0 >= 0) {
       inside_points[nInsidePointCount++] = &this->p[0];
+      inside_tex[nInsideTexCount++] = &this->t[0];
     } else {
       outside_points[nOutsidePointCount++] = &this->p[0];
+      outside_tex[nOutsideTexCount++] = &this->t[0];
     }
     if (d1 >= 0) {
       inside_points[nInsidePointCount++] = &this->p[1];
+      inside_tex[nInsideTexCount++] = &this->t[1];
     } else {
       outside_points[nOutsidePointCount++] = &this->p[1];
+      outside_tex[nOutsideTexCount++] = &this->t[1];
     }
     if (d2 >= 0) {
       inside_points[nInsidePointCount++] = &this->p[2];
+      inside_tex[nInsideTexCount++] = &this->t[2];
     } else {
       outside_points[nOutsidePointCount++] = &this->p[2];
+      outside_tex[nOutsideTexCount++] = &this->t[2];
     }
 
     // Now classify triangle points, and break the input triangle into
@@ -387,13 +413,24 @@ struct triangle {
 
       // The inside point is valid, so keep that...
       temp.p[0] = *inside_points[0];
+      temp.t[0] = *inside_tex[0];
 
       // but the two new points are at the locations where the
       // original sides of the triangle (lines) intersect with the plane
+      float t;
       temp.p[1] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
-                                         *outside_points[0]);
+                                         *outside_points[0], t);
+      temp.t[1].u =
+          t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+      temp.t[1].v =
+          t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
+
       temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
-                                         *outside_points[1]);
+                                         *outside_points[1], t);
+      temp.t[2].u =
+          t * (outside_tex[1]->u - inside_tex[0]->u) + inside_tex[0]->u;
+      temp.t[2].v =
+          t * (outside_tex[1]->v - inside_tex[0]->v) + inside_tex[0]->v;
 
       triangles.emplace_back(temp);
     }
@@ -416,8 +453,18 @@ struct triangle {
       // intersects with the plane
       temp.p[0] = *inside_points[0];
       temp.p[1] = *inside_points[1];
+
+      temp.t[0] = *inside_tex[0];
+      temp.t[1] = *inside_tex[1];
+
+      float t;
+
       temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[0],
-                                         *outside_points[0]);
+                                         *outside_points[0], t);
+      temp.t[2].u =
+          t * (outside_tex[0]->u - inside_tex[0]->u) + inside_tex[0]->u;
+      temp.t[2].v =
+          t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
 
       triangles.emplace_back(temp);
 
@@ -430,8 +477,16 @@ struct triangle {
       // triangle and the plane, and the newly created point above
       temp.p[0] = *inside_points[1];
       temp.p[1] = temp.p[2];
+
+      temp.t[0] = *inside_tex[1];
+      temp.t[1] = temp.t[2];
+
       temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[1],
-                                         *outside_points[0]);
+                                         *outside_points[0], t);
+      temp.t[2].u =
+          t * (outside_tex[1]->u - inside_tex[1]->u) + inside_tex[1]->u;
+      temp.t[2].v =
+          t * (outside_tex[1]->v - inside_tex[1]->v) + inside_tex[1]->v;
 
       triangles.emplace_back(temp);
     }
@@ -574,9 +629,98 @@ private:
 
   float fYaw;
 
+  olcSprite *sprTex;
+
 public:
   bool OnUserCreate() override {
-    mMesh.loadObj("mountains.obj");
+    mMesh.tris = {
+        // SOUTH
+        {{0.0f, 0.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{0.0f, 0.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 0.0f, 1.0f},
+         {1.0f, 0.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+        // EAST
+        {{1.0f, 0.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{1.0f, 0.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f, 1.0f},
+         {1.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+        // NORTH
+        {{1.0f, 0.0f, 1.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{1.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+        // WEST
+        {{0.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{0.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f, 0.0f, 1.0f},
+         {0.0f, 0.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+        // TOP
+        {{0.0f, 1.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f, 1.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{0.0f, 1.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f, 1.0f, 1.0f},
+         {1.0f, 1.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+        // BOTTOM
+        {{1.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 0.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {0.0f, 0.0f},
+         {1.0f, 0.0f}},
+        {{1.0f, 0.0f, 1.0f, 1.0f},
+         {0.0f, 0.0f, 0.0f, 1.0f},
+         {1.0f, 0.0f, 0.0f, 1.0f},
+         {0.0f, 1.0f},
+         {1.0f, 0.0f},
+         {1.0f, 1.0f}},
+
+    };
+
+    sprTex = new olcSprite(L"./Jario.spr");
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
@@ -640,6 +784,9 @@ public:
       triTransformed.p[0] = tri.p[0] * matWorld;
       triTransformed.p[1] = tri.p[1] * matWorld;
       triTransformed.p[2] = tri.p[2] * matWorld;
+      triTransformed.t[0] = tri.t[0];
+      triTransformed.t[1] = tri.t[1];
+      triTransformed.t[2] = tri.t[2];
 
       // Calculate triangle normal
       vec3d normal, line1, line2;
@@ -661,6 +808,9 @@ public:
         triViewed.p[0] = triTransformed.p[0] * matCamera;
         triViewed.p[1] = triTransformed.p[1] * matCamera;
         triViewed.p[2] = triTransformed.p[2] * matCamera;
+        triViewed.t[0] = triTransformed.t[0];
+        triViewed.t[1] = triTransformed.t[1];
+        triViewed.t[2] = triTransformed.t[2];
 
         // Clip triViewed against near plane
         std::vector<triangle> clipped = triViewed.clip_against_plane(
@@ -685,6 +835,9 @@ public:
           triProjected.p[2] = clipped[i].p[2] * matProj;
           triProjected.col = c.colour;
           triProjected.sym = c.glyph;
+          triProjected.t[0] = clipped[i].t[0];
+          triProjected.t[1] = clipped[i].t[1];
+          triProjected.t[2] = clipped[i].t[2];
 
           triProjected.p[0] /= triProjected.p[0].w;
           triProjected.p[1] /= triProjected.p[1].w;
@@ -773,16 +926,159 @@ public:
       // Draw the transformed, viewed, clipped, projected, sorted, clipped
       // triangles
       for (auto &t : listTriangles) {
-        FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
-                     t.sym, t.col);
+        textured_triangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.p[1].x,
+                          t.p[1].y, t.t[1].u, t.t[1].v, t.p[2].x, t.p[2].y,
+                          t.t[2].u, t.t[2].v, sprTex);
 #ifdef DEBUG
         DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
-                     PIXEL_SOLID, FG_BLACK);
+                     PIXEL_SOLID, FG_WHITE);
 #endif
       }
     }
 
     return true;
+  }
+
+  void textured_triangle(int x1, int y1, float u1, float v1, int x2, int y2,
+                         float u2, float v2, int x3, int y3, float u3, float v3,
+                         olcSprite *tex) {
+    if (y2 < y1) {
+      std::swap(y1, y2);
+      std::swap(x1, x2);
+      std::swap(u1, u2);
+      std::swap(v1, v2);
+    }
+
+    if (y3 < y1) {
+      std::swap(y1, y3);
+      std::swap(x1, x3);
+      std::swap(u1, u3);
+      std::swap(v1, v3);
+    }
+
+    if (y3 < y2) {
+      std::swap(y2, y3);
+      std::swap(x2, x3);
+      std::swap(u2, u3);
+      std::swap(v2, v3);
+    }
+
+    int dy1 = y2 - y1;
+    int dx1 = x2 - x1;
+    float du1 = u2 - u1;
+    float dv1 = v2 - v1;
+
+    int dy2 = y3 - y1;
+    int dx2 = x3 - x1;
+    float du2 = u3 - u1;
+    float dv2 = v3 - v1;
+
+    float tex_u, tex_v;
+
+    float dax_step = 0.0f;
+    float dbx_step = 0.0f;
+    float du1_step = 0.0f;
+    float dv1_step = 0.0f;
+    float du2_step = 0.0f;
+    float dv2_step = 0.0f;
+
+    if (dy1) {
+      dax_step = dx1 / static_cast<float>(std::abs(dy1));
+      du1_step = du1 / static_cast<float>(std::abs(dy1));
+      dv1_step = dv1 / static_cast<float>(std::abs(dy1));
+    }
+    if (dy2) {
+      dbx_step = dx2 / static_cast<float>(std::abs(dy2));
+      du2_step = du2 / static_cast<float>(std::abs(dy2));
+      dv2_step = dv2 / static_cast<float>(std::abs(dy2));
+    }
+
+    if (dy1) {
+      for (int i = y1; i <= y2; i++) {
+        int ax = x1 + static_cast<float>(i - y1) * dax_step;
+        int bx = x1 + static_cast<float>(i - y1) * dbx_step;
+
+        float tex_su = u1 + static_cast<float>(i - y1) * du1_step;
+        float tex_sv = v1 + static_cast<float>(i - y1) * dv1_step;
+
+        float tex_eu = u1 + static_cast<float>(i - y1) * du2_step;
+        float tex_ev = v1 + static_cast<float>(i - y1) * dv2_step;
+
+        if (ax > bx) {
+          std::swap(ax, bx);
+          std::swap(tex_su, tex_eu);
+          std::swap(tex_sv, tex_ev);
+        }
+
+        tex_u = tex_su;
+        tex_v = tex_sv;
+
+        float tstep = 1.0f / (static_cast<float>(bx - ax));
+        float t = 0.0f;
+
+        for (int j = ax; j < bx; j++) {
+          tex_u = (1.0f - t) * tex_su + t * tex_eu;
+          tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+
+          Draw(j, i, tex->SampleGlyph(tex_u, tex_v),
+               tex->SampleColour(tex_u, tex_v));
+
+          t += tstep;
+        }
+      }
+    }
+
+    dy1 = y3 - y2;
+    dx1 = x3 - x2;
+    du1 = u3 - u2;
+    dv1 = v3 - v2;
+
+    du1_step = 0.0f;
+    dv1_step = 0.0f;
+
+    if (dy1) {
+      dax_step = dx1 / static_cast<float>(std::abs(dy1));
+      du1_step = du1 / static_cast<float>(std::abs(dy1));
+      dv1_step = dv1 / static_cast<float>(std::abs(dy1));
+    }
+    if (dy2) {
+      dbx_step = dx2 / static_cast<float>(std::abs(dy2));
+    }
+
+    if (dy1) {
+      for (int i = y2; i <= y3; i++) {
+        int ax = x2 + static_cast<float>(i - y2) * dax_step;
+        int bx = x1 + static_cast<float>(i - y1) * dbx_step;
+
+        float tex_su = u2 + static_cast<float>(i - y2) * du1_step;
+        float tex_sv = v2 + static_cast<float>(i - y2) * dv1_step;
+
+        float tex_eu = u1 + static_cast<float>(i - y1) * du2_step;
+        float tex_ev = v1 + static_cast<float>(i - y1) * dv2_step;
+
+        if (ax > bx) {
+          std::swap(ax, bx);
+          std::swap(tex_su, tex_eu);
+          std::swap(tex_sv, tex_ev);
+        }
+
+        tex_u = tex_su;
+        tex_v = tex_sv;
+
+        float tstep = 1.0f / (static_cast<float>(bx - ax));
+        float t = 0.0f;
+
+        for (int j = ax; j < bx; j++) {
+          tex_u = (1.0f - t) * tex_su + t * tex_eu;
+          tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+
+          Draw(j, i, tex->SampleGlyph(tex_u, tex_v),
+               tex->SampleColour(tex_u, tex_v));
+
+          t += tstep;
+        }
+      }
+    }
   }
 };
 
