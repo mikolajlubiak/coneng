@@ -282,7 +282,7 @@ struct triangle {
 
   olc::Pixel col;
 
-  triangle() : p(), col(olc::WHITE) {}
+  triangle() : p(), col(olc::BLACK) {}
 
   triangle(const vec3d &x, const vec3d &y, const vec3d &z) : p{x, y, z} {}
 
@@ -784,7 +784,7 @@ public:
                 return z1 > z2;
               });
 
-    FillRect(0, 0, ScreenWidth(), ScreenHeight(), olc::CYAN);
+    FillRect(0, 0, ScreenWidth(), ScreenHeight(), olc::BLACK);
 
     for (triangle &triToRaster : vecTriangleToRaster) {
       // Clip triangles against all four screen edges, this could yield
@@ -927,9 +927,6 @@ public:
           std::swap(tex_sv, tex_ev);
         }
 
-        tex_u = tex_su;
-        tex_v = tex_sv;
-
         float tstep = 1.0f / (static_cast<float>(bx - ax));
         float t = 0.0f;
 
@@ -977,9 +974,6 @@ public:
           std::swap(tex_su, tex_eu);
           std::swap(tex_sv, tex_ev);
         }
-
-        tex_u = tex_su;
-        tex_v = tex_sv;
 
         float tstep = 1.0f / (static_cast<float>(bx - ax));
         float t = 0.0f;
