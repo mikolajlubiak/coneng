@@ -1,2 +1,2 @@
-# coneng
-3D CONsole ENGine
+# ConEng
+3D (no longer CONsole) ENGine
