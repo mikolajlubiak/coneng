@@ -18,9 +18,16 @@
 struct vec2d {
   float u;
   float v;
-  vec2d() : u(0.0f), v(0.0f) {}
-  vec2d(const float x) : u(x), v(x) {}
-  vec2d(const float u, const float v) : u(u), v(v) {}
+  float w;
+  vec2d() : u(0.0f), v(0.0f), w(1.0f) {}
+  vec2d(const float x) : u(x), v(x), w(1.0f) {}
+  vec2d(const float u, const float v) : u(u), v(v), w(1.0f) {}
+
+  vec2d &operator/=(const float k) {
+    this->u /= k;
+    this->v /= k;
+    return *this;
+  }
 };
 
 struct vec3d {
@@ -754,6 +761,14 @@ public:
           triProjected.t[1] = clipped[i].t[1];
           triProjected.t[2] = clipped[i].t[2];
 
+          triProjected.t[0] /= triProjected.p[0].w;
+          triProjected.t[1] /= triProjected.p[1].w;
+          triProjected.t[2] /= triProjected.p[2].w;
+
+          triProjected.t[0].w = 1.0f / triProjected.p[0].w;
+          triProjected.t[1].w = 1.0f / triProjected.p[1].w;
+          triProjected.t[2].w = 1.0f / triProjected.p[2].w;
+
           triProjected.p[0] /= triProjected.p[0].w;
           triProjected.p[1] /= triProjected.p[1].w;
           triProjected.p[2] /= triProjected.p[2].w;
@@ -843,9 +858,10 @@ public:
       // Draw the transformed, viewed, clipped, projected, sorted, clipped
       // triangles
       for (auto &t : listTriangles) {
-        textured_triangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.p[1].x,
-                          t.p[1].y, t.t[1].u, t.t[1].v, t.p[2].x, t.p[2].y,
-                          t.t[2].u, t.t[2].v, sprTex);
+        textured_triangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.t[0].w,
+                          t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v, t.t[1].w,
+                          t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, t.t[2].w,
+                          sprTex);
 #ifdef DEBUG
         DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
                      olc::WHITE);
@@ -856,14 +872,16 @@ public:
     return true;
   }
 
-  void textured_triangle(int x1, int y1, float u1, float v1, int x2, int y2,
-                         float u2, float v2, int x3, int y3, float u3, float v3,
-                         olc::Sprite *tex) {
+  void textured_triangle(int x1, int y1, float u1, float v1, float w1, int x2,
+                         int y2, float u2, float v2, float w2, int x3, int y3,
+                         float u3, float v3, float w3,
+                         const olc::Sprite *const tex) {
     if (y2 < y1) {
       std::swap(y1, y2);
       std::swap(x1, x2);
       std::swap(u1, u2);
       std::swap(v1, v2);
+      std::swap(w1, w2);
     }
 
     if (y3 < y1) {
@@ -871,6 +889,7 @@ public:
       std::swap(x1, x3);
       std::swap(u1, u3);
       std::swap(v1, v3);
+      std::swap(w1, w3);
     }
 
     if (y3 < y2) {
@@ -878,36 +897,43 @@ public:
       std::swap(x2, x3);
       std::swap(u2, u3);
       std::swap(v2, v3);
+      std::swap(w2, w3);
     }
 
     int dy1 = y2 - y1;
     int dx1 = x2 - x1;
     float du1 = u2 - u1;
     float dv1 = v2 - v1;
+    float dw1 = w2 - w1;
 
     int dy2 = y3 - y1;
     int dx2 = x3 - x1;
     float du2 = u3 - u1;
     float dv2 = v3 - v1;
+    float dw2 = w3 - w1;
 
-    float tex_u, tex_v;
+    float tex_u, tex_v, tex_w;
 
     float dax_step = 0.0f;
     float dbx_step = 0.0f;
     float du1_step = 0.0f;
     float dv1_step = 0.0f;
+    float dw1_step = 0.0f;
     float du2_step = 0.0f;
     float dv2_step = 0.0f;
+    float dw2_step = 0.0f;
 
     if (dy1) {
       dax_step = dx1 / static_cast<float>(std::abs(dy1));
       du1_step = du1 / static_cast<float>(std::abs(dy1));
       dv1_step = dv1 / static_cast<float>(std::abs(dy1));
+      dw1_step = dw1 / static_cast<float>(std::abs(dy1));
     }
     if (dy2) {
       dbx_step = dx2 / static_cast<float>(std::abs(dy2));
       du2_step = du2 / static_cast<float>(std::abs(dy2));
       dv2_step = dv2 / static_cast<float>(std::abs(dy2));
+      dw2_step = dw2 / static_cast<float>(std::abs(dy2));
     }
 
     if (dy1) {
@@ -917,24 +943,28 @@ public:
 
         float tex_su = u1 + static_cast<float>(i - y1) * du1_step;
         float tex_sv = v1 + static_cast<float>(i - y1) * dv1_step;
+        float tex_sw = w1 + static_cast<float>(i - y1) * dw1_step;
 
         float tex_eu = u1 + static_cast<float>(i - y1) * du2_step;
         float tex_ev = v1 + static_cast<float>(i - y1) * dv2_step;
+        float tex_ew = w1 + static_cast<float>(i - y1) * dw2_step;
 
         if (ax > bx) {
           std::swap(ax, bx);
           std::swap(tex_su, tex_eu);
           std::swap(tex_sv, tex_ev);
+          std::swap(tex_sw, tex_ew);
         }
 
-        float tstep = 1.0f / (static_cast<float>(bx - ax));
+        float tstep = 1.0f / static_cast<float>(bx - ax);
         float t = 0.0f;
 
         for (int j = ax; j < bx; j++) {
           tex_u = (1.0f - t) * tex_su + t * tex_eu;
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+          tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 
-          Draw(j, i, tex->Sample(tex_u, tex_v));
+          Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
 
           t += tstep;
         }
@@ -945,6 +975,7 @@ public:
     dx1 = x3 - x2;
     du1 = u3 - u2;
     dv1 = v3 - v2;
+    dw1 = w3 - w2;
 
     du1_step = 0.0f;
     dv1_step = 0.0f;
@@ -953,6 +984,7 @@ public:
       dax_step = dx1 / static_cast<float>(std::abs(dy1));
       du1_step = du1 / static_cast<float>(std::abs(dy1));
       dv1_step = dv1 / static_cast<float>(std::abs(dy1));
+      dw1_step = dw1 / static_cast<float>(std::abs(dy1));
     }
     if (dy2) {
       dbx_step = dx2 / static_cast<float>(std::abs(dy2));
@@ -965,24 +997,28 @@ public:
 
         float tex_su = u2 + static_cast<float>(i - y2) * du1_step;
         float tex_sv = v2 + static_cast<float>(i - y2) * dv1_step;
+        float tex_sw = w2 + static_cast<float>(i - y2) * dw1_step;
 
         float tex_eu = u1 + static_cast<float>(i - y1) * du2_step;
         float tex_ev = v1 + static_cast<float>(i - y1) * dv2_step;
+        float tex_ew = w1 + static_cast<float>(i - y1) * dw2_step;
 
         if (ax > bx) {
           std::swap(ax, bx);
           std::swap(tex_su, tex_eu);
           std::swap(tex_sv, tex_ev);
+          std::swap(tex_sw, tex_ew);
         }
 
-        float tstep = 1.0f / (static_cast<float>(bx - ax));
+        float tstep = 1.0f / static_cast<float>(bx - ax);
         float t = 0.0f;
 
         for (int j = ax; j < bx; j++) {
           tex_u = (1.0f - t) * tex_su + t * tex_eu;
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+          tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 
-          Draw(j, i, tex->Sample(tex_u, tex_v));
+          Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
 
           t += tstep;
         }
