@@ -411,11 +411,7 @@ struct triangle {
       // the plane, the triangle simply becomes a smaller triangle
 
       // Copy appearance info to new triangle
-#ifdef DEBUG
-      temp.col = olc::BLUE;
-#else
       temp.col = this->col;
-#endif
 
       // The inside point is valid, so keep that...
       temp.p[0] = *inside_points[0];
@@ -447,11 +443,7 @@ struct triangle {
       // represent a quad with two new triangles
 
       // Copy appearance info to new triangles
-#ifdef DEBUG
-      temp.col = olc::GREEN;
-#else
       temp.col = this->col;
-#endif
 
       // The first triangle consists of the two inside points and a new
       // point determined by the location where one side of the triangle
@@ -472,10 +464,6 @@ struct triangle {
           t * (outside_tex[0]->v - inside_tex[0]->v) + inside_tex[0]->v;
 
       triangles.emplace_back(temp);
-
-#ifdef DEBUG
-      temp.col = olc::RED;
-#endif
 
       // The second triangle is composed of one of he inside points, a
       // new point determined by the intersection of the other side of the
@@ -502,7 +490,7 @@ struct triangle {
 struct mesh {
   std::vector<triangle> tris;
 
-  bool loadObj(std::string sPath) {
+  bool loadObj(std::string sPath, bool bHasTexture = false) {
     std::ifstream f(sPath);
     if (!f.is_open() || !f.good())
       return false;
@@ -510,6 +498,9 @@ struct mesh {
     tris.reserve(RESERVE_TRIS);
 
     std::vector<vec3d> verts;
+    verts.reserve(RESERVE_VERTS);
+
+    std::vector<vec2d> texs;
     verts.reserve(RESERVE_VERTS);
 
     while (!f.eof()) {
@@ -522,13 +513,39 @@ struct mesh {
       char junk;
 
       if (line[0] == 'v') {
-        vec3d v;
-        s >> junk >> v.x >> v.y >> v.z;
-        verts.emplace_back(v);
-      } else if (line[0] == 'f') {
+        if (line[1] == 't') {
+          vec2d v;
+          s >> junk >> junk >> v.u >> v.v;
+          texs.emplace_back(v);
+        } else {
+          vec3d v;
+          s >> junk >> v.x >> v.y >> v.z;
+          verts.emplace_back(v);
+        }
+      } else if (line[0] == 'f' && !bHasTexture) {
         int f[3];
         s >> junk >> f[0] >> f[1] >> f[2];
         tris.emplace_back(verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]);
+      } else if (line[0] == 'f' && bHasTexture) {
+        s >> junk;
+
+        std::string tokens[6];
+        int nTokenCount = -1;
+
+        while (!s.eof()) {
+          char c = s.get();
+          if (c == ' ' || c == '/')
+            nTokenCount++;
+          else
+            tokens[nTokenCount].append(1, c);
+        }
+
+        tokens[nTokenCount].pop_back();
+
+        tris.emplace_back(verts[stoi(tokens[0]) - 1],
+                          verts[stoi(tokens[2]) - 1],
+                          verts[stoi(tokens[4]) - 1], texs[stoi(tokens[1]) - 1],
+                          texs[stoi(tokens[3]) - 1], texs[stoi(tokens[5]) - 1]);
       }
     }
 
@@ -553,11 +570,15 @@ private:
   vec3d vLookDir;
 
   float fYaw;
+  float fTheta;
+  float *pDepthBuffer;
 
   olc::Sprite *sprTex;
 
 public:
   bool OnUserCreate() override {
+    pDepthBuffer = new float[ScreenWidth() * ScreenHeight()];
+
     mMesh.tris = {
         // SOUTH
         {{0.0f, 0.0f, 0.0f, 1.0f},
@@ -644,8 +665,7 @@ public:
          {1.0f, 1.0f}},
 
     };
-
-    sprTex = new olc::Sprite("Jario.png");
+    sprTex = new olc::Sprite("jario.png");
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
@@ -675,13 +695,18 @@ public:
     if (GetKey(olc::Key::D).bHeld)
       fYaw += 2.0f * fElapsedTime;
 
+    mat4 matRotZ, matRotX;
+    fTheta += fElapsedTime;
+    matRotZ.rotation_z(fTheta / 2.0f);
+    matRotX.rotation_x(fTheta);
+
     // Make translation matrix
     mat4 matTrans;
-    matTrans.translation(0.0f, 0.0f, 16.0f);
+    matTrans.translation(0.0f, 0.0f, 8.0f);
 
     // Make world matrix
     mat4 matWorld;
-    matWorld.identity();
+    matWorld = matRotZ * matRotX;
     matWorld = matWorld * matTrans;
 
     vec3d vUp = {0.0f, 1.0f, 0.0f};
@@ -792,14 +817,18 @@ public:
     }
 
     // Sort triangles by depth (from back to front)
+    /*
     std::sort(vecTriangleToRaster.begin(), vecTriangleToRaster.end(),
               [](const triangle &t1, const triangle &t2) {
                 float z1 = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
                 float z2 = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
                 return z1 > z2;
               });
+    */
 
     FillRect(0, 0, ScreenWidth(), ScreenHeight(), olc::BLACK);
+    for (int i = 0; i < ScreenWidth() * ScreenHeight(); i++)
+      pDepthBuffer[i] = 0.0f;
 
     for (triangle &triToRaster : vecTriangleToRaster) {
       // Clip triangles against all four screen edges, this could yield
@@ -810,7 +839,7 @@ public:
       std::list<triangle> listTriangles;
 
       // Add initial triangle
-      listTriangles.push_back(triToRaster);
+      listTriangles.emplace_back(triToRaster);
       int nNewTriangles = 1;
 
       for (int p = 0; p < 4; p++) {
@@ -850,7 +879,7 @@ public:
           // add these new ones to the back of the queue for subsequent
           // clipping against next planes
           for (size_t w = 0; w < clipped.size(); w++)
-            listTriangles.push_back(clipped[w]);
+            listTriangles.emplace_back(clipped[w]);
         }
         nNewTriangles = listTriangles.size();
       }
@@ -964,7 +993,10 @@ public:
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
           tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 
-          Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
+          if (tex_w > pDepthBuffer[i * ScreenWidth() + j]) {
+            Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
+            pDepthBuffer[i * ScreenWidth() + j] = tex_w;
+          }
 
           t += tstep;
         }
@@ -1018,7 +1050,10 @@ public:
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
           tex_w = (1.0f - t) * tex_sw + t * tex_ew;
 
-          Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
+          if (tex_w > pDepthBuffer[i * ScreenWidth() + j]) {
+            Draw(j, i, tex->Sample(tex_u / tex_w, tex_v / tex_w));
+            pDepthBuffer[i * ScreenWidth() + j] = tex_w;
+          }
 
           t += tstep;
         }

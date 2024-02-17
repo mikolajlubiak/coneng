@@ -4,11 +4,11 @@ CXXFLAGS := -Wall -Wextra -pedantic
 DEBUGFLAGS := --debug -DDEBUG
 RELEASEFLAGS := -Ofast -march=native -mtune=native
 
-release: $(SRC_FILES)
-	clang++ $(CXXFLAGS) $(RELEASEFLAGS) $(LDFLAGS) -o $@ $^
-
 debug: $(SRC_FILES)
-	clang++ $(CXXFLAGS) $(DEBUGFLAGS) $(LDFLAGS) -o $@ $^
+	g++ $(CXXFLAGS) $(DEBUGFLAGS) $(LDFLAGS) -o $@ $^
+
+release: $(SRC_FILES)
+	g++ $(CXXFLAGS) $(RELEASEFLAGS) $(LDFLAGS) -o $@ $^
 
 clean:
 	rm -rf release debug
