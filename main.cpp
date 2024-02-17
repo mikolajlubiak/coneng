@@ -1,4 +1,5 @@
-#include "olcConsoleGameEngineSDL.h"
+#define OLC_PGE_APPLICATION
+#include "olcPixelGameEngine.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -279,10 +280,9 @@ struct triangle {
   vec3d p[3];
   vec2d t[3];
 
-  wchar_t sym;
-  short col;
+  olc::Pixel col;
 
-  triangle() : p(), sym(PIXEL_SOLID), col(FG_WHITE) {}
+  triangle() : p(), col(olc::WHITE) {}
 
   triangle(const vec3d &x, const vec3d &y, const vec3d &z) : p{x, y, z} {}
 
@@ -290,9 +290,9 @@ struct triangle {
            const vec2d b, const vec2d c)
       : p{x, y, z}, t{a, b, c} {}
 
-  triangle(const vec3d &x, const vec3d &y, const vec3d &z, const wchar_t glyph,
-           const short colour)
-      : p{x, y, z}, sym(glyph), col(colour) {}
+  triangle(const vec3d &x, const vec3d &y, const vec3d &z,
+           const olc::Pixel color)
+      : p{x, y, z}, col(color) {}
 
 #ifdef OPTIM_DEBUG
   triangle &operator=(const triangle &other) {
@@ -405,11 +405,10 @@ struct triangle {
 
       // Copy appearance info to new triangle
 #ifdef DEBUG
-      temp.col = FG_BLUE;
+      temp.col = olc::BLUE;
 #else
       temp.col = this->col;
 #endif
-      temp.sym = this->sym;
 
       // The inside point is valid, so keep that...
       temp.p[0] = *inside_points[0];
@@ -442,11 +441,10 @@ struct triangle {
 
       // Copy appearance info to new triangles
 #ifdef DEBUG
-      temp.col = FG_GREEN;
+      temp.col = olc::GREEN;
 #else
       temp.col = this->col;
 #endif
-      temp.sym = this->sym;
 
       // The first triangle consists of the two inside points and a new
       // point determined by the location where one side of the triangle
@@ -469,7 +467,7 @@ struct triangle {
       triangles.emplace_back(temp);
 
 #ifdef DEBUG
-      temp.col = FG_RED;
+      temp.col = olc::RED;
 #endif
 
       // The second triangle is composed of one of he inside points, a
@@ -484,9 +482,9 @@ struct triangle {
       temp.p[2] = vector_intersect_plane(plane_p, plane_n, *inside_points[1],
                                          *outside_points[0], t);
       temp.t[2].u =
-          t * (outside_tex[1]->u - inside_tex[1]->u) + inside_tex[1]->u;
+          t * (outside_tex[0]->u - inside_tex[1]->u) + inside_tex[1]->u;
       temp.t[2].v =
-          t * (outside_tex[1]->v - inside_tex[1]->v) + inside_tex[1]->v;
+          t * (outside_tex[0]->v - inside_tex[1]->v) + inside_tex[1]->v;
 
       triangles.emplace_back(temp);
     }
@@ -531,94 +529,14 @@ struct mesh {
   }
 };
 
-CHAR_INFO GetColour(float lum) {
-  short bg_col, fg_col;
-  wchar_t sym;
-  int pixel_bw = static_cast<int>(13.0f * lum);
-  switch (pixel_bw) {
-  case 0:
-    bg_col = BG_BLACK;
-    fg_col = FG_BLACK;
-    sym = PIXEL_SOLID;
-    break;
-
-  case 1:
-    bg_col = BG_BLACK;
-    fg_col = FG_DARK_GREY;
-    sym = PIXEL_QUARTER;
-    break;
-  case 2:
-    bg_col = BG_BLACK;
-    fg_col = FG_DARK_GREY;
-    sym = PIXEL_HALF;
-    break;
-  case 3:
-    bg_col = BG_BLACK;
-    fg_col = FG_DARK_GREY;
-    sym = PIXEL_THREEQUARTERS;
-    break;
-  case 4:
-    bg_col = BG_BLACK;
-    fg_col = FG_DARK_GREY;
-    sym = PIXEL_SOLID;
-    break;
-
-  case 5:
-    bg_col = BG_DARK_GREY;
-    fg_col = FG_GREY;
-    sym = PIXEL_QUARTER;
-    break;
-  case 6:
-    bg_col = BG_DARK_GREY;
-    fg_col = FG_GREY;
-    sym = PIXEL_HALF;
-    break;
-  case 7:
-    bg_col = BG_DARK_GREY;
-    fg_col = FG_GREY;
-    sym = PIXEL_THREEQUARTERS;
-    break;
-  case 8:
-    bg_col = BG_DARK_GREY;
-    fg_col = FG_GREY;
-    sym = PIXEL_SOLID;
-    break;
-
-  case 9:
-    bg_col = BG_GREY;
-    fg_col = FG_WHITE;
-    sym = PIXEL_QUARTER;
-    break;
-  case 10:
-    bg_col = BG_GREY;
-    fg_col = FG_WHITE;
-    sym = PIXEL_HALF;
-    break;
-  case 11:
-    bg_col = BG_GREY;
-    fg_col = FG_WHITE;
-    sym = PIXEL_THREEQUARTERS;
-    break;
-  case 12:
-    bg_col = BG_GREY;
-    fg_col = FG_WHITE;
-    sym = PIXEL_SOLID;
-    break;
-  default:
-    bg_col = BG_BLACK;
-    fg_col = FG_BLACK;
-    sym = PIXEL_SOLID;
-  }
-
-  CHAR_INFO c;
-  c.colour = bg_col | fg_col;
-  c.glyph = sym;
-  return c;
+olc::Pixel GetColour(float lum) {
+  int nValue = (int)(std::max(lum, 0.20f) * 255.0f);
+  return olc::Pixel(nValue, nValue, nValue);
 }
 
-class olcGameEngine : public olcConsoleGameEngine {
+class olcGameEngine : public olc::PixelGameEngine {
 public:
-  olcGameEngine() { m_sAppName = L"3D demo"; }
+  olcGameEngine() { sAppName = "3D demo"; }
 
 private:
   mesh mMesh;
@@ -629,7 +547,7 @@ private:
 
   float fYaw;
 
-  olcSprite *sprTex;
+  olc::Sprite *sprTex;
 
 public:
   bool OnUserCreate() override {
@@ -720,7 +638,7 @@ public:
 
     };
 
-    sprTex = new olcSprite(L"./Jario.spr");
+    sprTex = new olc::Sprite("Jario.png");
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
@@ -731,26 +649,24 @@ public:
   }
 
   bool OnUserUpdate(float fElapsedTime) override {
-    if (GetKey(VK_UP).bHeld)
+    if (GetKey(olc::Key::UP).bHeld)
       vCamera.y += 8.0f * fElapsedTime;
-    if (GetKey(VK_DOWN).bHeld)
+    if (GetKey(olc::Key::DOWN).bHeld)
       vCamera.y -= 8.0f * fElapsedTime;
-    if (GetKey(VK_LEFT).bHeld)
+    if (GetKey(olc::Key::LEFT).bHeld)
       vCamera.x += 8.0f * fElapsedTime;
-    if (GetKey(VK_RIGHT).bHeld)
+    if (GetKey(olc::Key::RIGHT).bHeld)
       vCamera.x -= 8.0f * fElapsedTime;
 
     vec3d vForward = vLookDir * (8.0f * fElapsedTime);
-    if (GetKey(L'W').bHeld)
+    if (GetKey(olc::Key::W).bHeld)
       vCamera += vForward;
-    if (GetKey(L'S').bHeld)
+    if (GetKey(olc::Key::S).bHeld)
       vCamera -= vForward;
-    if (GetKey(L'A').bHeld)
+    if (GetKey(olc::Key::A).bHeld)
       fYaw -= 2.0f * fElapsedTime;
-    if (GetKey(L'D').bHeld)
+    if (GetKey(olc::Key::D).bHeld)
       fYaw += 2.0f * fElapsedTime;
-
-    Fill(0, 0, ScreenWidth(), ScreenHeight(), PIXEL_SOLID, FG_BLACK);
 
     // Make translation matrix
     mat4 matTrans;
@@ -816,7 +732,7 @@ public:
         std::vector<triangle> clipped = triViewed.clip_against_plane(
             {0.0f, 0.0f, NEAR_PLANE}, {0.0f, 0.0f, 1.0f});
 
-        CHAR_INFO c;
+        olc::Pixel c;
         if (clipped.size()) {
           // Set and normalize light direction
           vec3d light_direction = {0.0f, 1.0f, -1.0f};
@@ -833,8 +749,7 @@ public:
           triProjected.p[0] = clipped[i].p[0] * matProj;
           triProjected.p[1] = clipped[i].p[1] * matProj;
           triProjected.p[2] = clipped[i].p[2] * matProj;
-          triProjected.col = c.colour;
-          triProjected.sym = c.glyph;
+          triProjected.col = c;
           triProjected.t[0] = clipped[i].t[0];
           triProjected.t[1] = clipped[i].t[1];
           triProjected.t[2] = clipped[i].t[2];
@@ -868,6 +783,8 @@ public:
                 float z2 = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
                 return z1 > z2;
               });
+
+    FillRect(0, 0, ScreenWidth(), ScreenHeight(), olc::CYAN);
 
     for (triangle &triToRaster : vecTriangleToRaster) {
       // Clip triangles against all four screen edges, this could yield
@@ -931,7 +848,7 @@ public:
                           t.t[2].u, t.t[2].v, sprTex);
 #ifdef DEBUG
         DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
-                     PIXEL_SOLID, FG_WHITE);
+                     olc::WHITE);
 #endif
       }
     }
@@ -941,7 +858,7 @@ public:
 
   void textured_triangle(int x1, int y1, float u1, float v1, int x2, int y2,
                          float u2, float v2, int x3, int y3, float u3, float v3,
-                         olcSprite *tex) {
+                         olc::Sprite *tex) {
     if (y2 < y1) {
       std::swap(y1, y2);
       std::swap(x1, x2);
@@ -1020,8 +937,7 @@ public:
           tex_u = (1.0f - t) * tex_su + t * tex_eu;
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 
-          Draw(j, i, tex->SampleGlyph(tex_u, tex_v),
-               tex->SampleColour(tex_u, tex_v));
+          Draw(j, i, tex->Sample(tex_u, tex_v));
 
           t += tstep;
         }
@@ -1072,8 +988,7 @@ public:
           tex_u = (1.0f - t) * tex_su + t * tex_eu;
           tex_v = (1.0f - t) * tex_sv + t * tex_ev;
 
-          Draw(j, i, tex->SampleGlyph(tex_u, tex_v),
-               tex->SampleColour(tex_u, tex_v));
+          Draw(j, i, tex->Sample(tex_u, tex_v));
 
           t += tstep;
         }
@@ -1084,10 +999,10 @@ public:
 
 int main() {
   olcGameEngine demo;
-  if (demo.ConstructConsole(256, 240, 4, 4))
+  if (demo.Construct(256, 240, 4, 4))
     demo.Start();
   else
-    std::cerr << "Could not construct console" << std::endl;
+    std::cerr << "Could not construct" << std::endl;
 
-  return 0;
+  return EXIT_SUCCESS;
 }

@@ -1,8 +1,8 @@
 SRC_FILES := $(shell find -name *.cpp)
-LDFLAGS :=  -lSDL2 -lpthread
+LDFLAGS := -lX11 -lGL -lpthread -lpng -lstdc++fs
 CXXFLAGS := -Wall -Wextra -pedantic
 DEBUGFLAGS := --debug -DDEBUG
-RELEASEFLAGS := -O3 -march=native -mtune=native
+RELEASEFLAGS := -Ofast -march=native -mtune=native
 
 
 debug: $(SRC_FILES)
