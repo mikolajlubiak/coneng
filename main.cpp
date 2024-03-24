@@ -570,16 +570,16 @@ private:
   vec3d vLookDir;
 
   float fYaw;
-  float fTheta;
+  // float fTheta;
   float *pDepthBuffer;
 
-  olc::Sprite *sprTex;
+  // olc::Sprite *sprTex;
 
 public:
   bool OnUserCreate() override {
-    pDepthBuffer = new float[ScreenWidth() * ScreenHeight()];
+    // pDepthBuffer = new float[ScreenWidth() * ScreenHeight()];
 
-    mMesh.tris = {
+    /*
         // SOUTH
         {{0.0f, 0.0f, 0.0f, 1.0f},
          {0.0f, 1.0f, 0.0f, 1.0f},
@@ -663,9 +663,11 @@ public:
          {0.0f, 1.0f},
          {1.0f, 0.0f},
          {1.0f, 1.0f}},
+    */
 
-    };
-    sprTex = new olc::Sprite("jario.png");
+    mMesh.loadObj("mountains.obj");
+
+    // sprTex = new olc::Sprite("jario.png");
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
@@ -695,10 +697,10 @@ public:
     if (GetKey(olc::Key::D).bHeld)
       fYaw += 2.0f * fElapsedTime;
 
-    mat4 matRotZ, matRotX;
-    fTheta += fElapsedTime;
-    matRotZ.rotation_z(fTheta / 2.0f);
-    matRotX.rotation_x(fTheta);
+    // mat4 matRotZ, matRotX;
+    // fTheta += fElapsedTime;
+    // matRotZ.rotation_z(fTheta / 2.0f);
+    // matRotX.rotation_x(fTheta);
 
     // Make translation matrix
     mat4 matTrans;
@@ -706,7 +708,8 @@ public:
 
     // Make world matrix
     mat4 matWorld;
-    matWorld = matRotZ * matRotX;
+    matWorld.identity();
+    // matWorld = matRotZ * matRotX;
     matWorld = matWorld * matTrans;
 
     vec3d vUp = {0.0f, 1.0f, 0.0f};
@@ -817,18 +820,18 @@ public:
     }
 
     // Sort triangles by depth (from back to front)
-    /*
     std::sort(vecTriangleToRaster.begin(), vecTriangleToRaster.end(),
               [](const triangle &t1, const triangle &t2) {
                 float z1 = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
                 float z2 = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
                 return z1 > z2;
               });
-    */
 
     FillRect(0, 0, ScreenWidth(), ScreenHeight(), olc::BLACK);
+    /*
     for (int i = 0; i < ScreenWidth() * ScreenHeight(); i++)
       pDepthBuffer[i] = 0.0f;
+    */
 
     for (triangle &triToRaster : vecTriangleToRaster) {
       // Clip triangles against all four screen edges, this could yield
@@ -887,10 +890,14 @@ public:
       // Draw the transformed, viewed, clipped, projected, sorted, clipped
       // triangles
       for (auto &t : listTriangles) {
+        /*
         textured_triangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.t[0].w,
                           t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v, t.t[1].w,
                           t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, t.t[2].w,
                           sprTex);
+        */
+        FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
+                     t.col);
 #ifdef DEBUG
         DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y,
                      olc::WHITE);
