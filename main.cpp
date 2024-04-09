@@ -783,6 +783,8 @@ public:
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override {
+		fTheta += fElapsedTime;
+
 		// GET USER INPUT
 		if (GetKey(olc::Key::UP).bHeld)
 			vCamera.y += 8.0f * fElapsedTime;
@@ -803,20 +805,26 @@ public:
 		if (GetKey(olc::Key::D).bHeld)
 			fYaw += 2.0f * fElapsedTime;
 
-		// mat4 matRotZ, matRotX;
-		// fTheta += fElapsedTime;
-		// matRotZ.rotation_z(fTheta / 2.0f);
-		// matRotX.rotation_x(fTheta);
+		mat4 matRotZ, matRotX;
+		matRotZ.rotation_z(fTheta / 2.0f);
+		matRotX.rotation_x(fTheta);
 
 		// Make translation matrix
-		mat4 matTrans;
-		matTrans.translation(0.0f, 0.0f, 8.0f);
+		mat4 matTrans1;
+		matTrans1.translation(0.0f, 0.0f, fTheta * 2.0f);
+
+		mat4 matTrans2;
+		matTrans2.translation(0.0f, -10.0f, 0.0f);
 
 		// Make world matrix
-		mat4 matWorld;
-		matWorld.identity();
-		// matWorld = matRotZ * matRotX;
-		matWorld = matWorld * matTrans;
+		mat4 matWorld1;
+		matWorld1 = matRotZ * matRotX;
+
+		mat4 matWorld2;
+		matWorld2.identity();
+
+		matWorld1 = matWorld1 * matTrans1;
+		matWorld2 = matWorld2 * matTrans2;
 
 		vec3d vUp = { 0.0f, 1.0f, 0.0f };
 		vec3d vTarget = { 0.0f, 0.0f, 1.0f };
@@ -832,10 +840,8 @@ public:
 		// Make vector of trinagles to raster
 		std::vector<triangle> vecTriangleToRaster;
 
-		for (const mesh& m : meshes) {
-			getTrianglesToRaster(m, vecTriangleToRaster, matWorld, matCamera);
-		}
-
+		getTrianglesToRaster(meshes[0], vecTriangleToRaster, matWorld1, matCamera);
+		getTrianglesToRaster(meshes[1], vecTriangleToRaster, matWorld2, matCamera);
 
 		// DRAW TRIANGLES
 		// Sort triangles by depth (from back to front)
