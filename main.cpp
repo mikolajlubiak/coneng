@@ -576,6 +576,7 @@ private:
 	vec3d vCamera;
 	vec3d vLookDir;
 
+	float fPitch;
 	float fYaw;
 	float fTheta;
 	float* pDepthBuffer;
@@ -804,6 +805,11 @@ public:
 			fYaw -= 2.0f * fElapsedTime;
 		if (GetKey(olc::Key::D).bHeld)
 			fYaw += 2.0f * fElapsedTime;
+		if (GetKey(olc::Key::PGDN).bHeld)
+			fPitch += 2.0f * fElapsedTime;
+		if (GetKey(olc::Key::PGUP).bHeld)
+			fPitch -= 2.0f * fElapsedTime;
+
 
 		mat4 matRotZ, matRotX;
 		matRotZ.rotation_z(fTheta / 2.0f);
@@ -828,8 +834,10 @@ public:
 
 		vec3d vUp = { 0.0f, 1.0f, 0.0f };
 		vec3d vTarget = { 0.0f, 0.0f, 1.0f };
-		mat4 matCameraRot;
-		matCameraRot.rotation_y(fYaw);
+		mat4 matCameraRot, matRotPitch, matRotYaw;
+		matRotPitch.rotation_x(fPitch);
+		matRotYaw.rotation_y(fYaw);
+		matCameraRot = matRotPitch * matRotYaw;
 		vLookDir = vTarget * matCameraRot;
 		vTarget = vCamera + vLookDir;
 
