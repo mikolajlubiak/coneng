@@ -576,9 +576,15 @@ private:
 	vec3d vCamera;
 	vec3d vLookDir;
 
+	olc::vi2d vMouse;
+
 	float fPitch;
 	float fYaw;
 	float fTheta;
+	float fSensitivity = 0.005f;
+	float fLastX;
+	float fLastY;
+
 	float* pDepthBuffer;
 
 	olc::Sprite* sprTex;
@@ -810,6 +816,27 @@ public:
 		if (GetKey(olc::Key::PGUP).bHeld)
 			fPitch -= 2.0f * fElapsedTime;
 
+		vMouse = GetMousePos();
+
+		float xpos = static_cast<float>(vMouse.x);
+		float ypos = static_cast<float>(vMouse.y);
+
+		float xoffset = xpos - fLastX;
+		float yoffset = ypos - fLastY;
+
+		fLastX = xpos;
+		fLastY = ypos;
+
+		xoffset *= fSensitivity;
+		yoffset *= fSensitivity;
+
+		fYaw   += xoffset;
+		fPitch += yoffset;
+
+		if (fPitch > 89.0f)
+			fPitch = 89.0f;
+		if (fPitch < -89.0f)
+			fPitch = -89.0f;
 
 		mat4 matRotZ, matRotX;
 		matRotZ.rotation_z(fTheta / 2.0f);
