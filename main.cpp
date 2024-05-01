@@ -413,6 +413,7 @@ struct triangle {
 
       // Copy appearance info to new triangle
       temp.col = this->col;
+	  temp.spriteId = this->spriteId;
 
       // The inside point is valid, so keep that...
       temp.p[0] = *inside_points[0];
@@ -445,6 +446,7 @@ struct triangle {
 
       // Copy appearance info to new triangles
       temp.col = this->col;
+	  temp.spriteId = this->spriteId;
 
       // The first triangle consists of the two inside points and a new
       // point determined by the location where one side of the triangle
