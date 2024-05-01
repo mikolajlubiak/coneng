@@ -1585,7 +1585,7 @@ namespace olc
 	}
 
 	Sprite::~Sprite()
-	{ pColData.clear();	}
+	{ pColData.clear(); }
 
 	void Sprite::SetSampleMode(olc::Sprite::Mode mode)
 	{ modeSample = mode; }
