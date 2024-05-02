@@ -588,7 +588,10 @@ private:
 
   void getTrianglesToRaster(const mesh &m, std::vector<triangle> &v,
                             const mat4 &matWorld, const mat4 &matCamera,
-                            const int8_t spriteId = -1) const {
+                            const int8_t spriteId = -1,
+                            const bool collide = false) const {
+    mat4 mReaction;
+    mReaction.identity();
     for (const triangle &tri : m.tris) {
       triangle triProjected, triTransformed, triViewed;
 
@@ -596,9 +599,41 @@ private:
       triTransformed.p[0] = tri.p[0] * matWorld;
       triTransformed.p[1] = tri.p[1] * matWorld;
       triTransformed.p[2] = tri.p[2] * matWorld;
-      triTransformed.t[0] = tri.t[0];
-      triTransformed.t[1] = tri.t[1];
-      triTransformed.t[2] = tri.t[2];
+
+      if (collide) {
+        for (const triangle &other : v) {
+          if ((triTransformed.p[0].y + triTransformed.p[1].y +
+               triTransformed.p[2].y) /
+                      3 <
+                  (other.p[0].y + other.p[1].y + other.p[2].y) / 3 &&
+              ((triTransformed.p[0].x + triTransformed.p[1].x +
+                triTransformed.p[2].x) /
+                           3 -
+                       10.0f <
+                   (other.p[0].x + other.p[1].x + other.p[2].x) / 3 ||
+               (triTransformed.p[0].x + triTransformed.p[1].x +
+                triTransformed.p[2].x) /
+                           3 +
+                       10.0f <
+                   (other.p[0].x + other.p[1].x + other.p[2].x) / 3) &&
+              ((triTransformed.p[0].z + triTransformed.p[1].z +
+                triTransformed.p[2].z) /
+                           3 -
+                       10.0f >
+                   (other.p[0].z + other.p[1].z + other.p[2].z) / 3 ||
+               (triTransformed.p[0].z + triTransformed.p[1].z +
+                triTransformed.p[2].z) /
+                           3 +
+                       10.0f <
+                   (other.p[0].z + other.p[1].z + other.p[2].z) / 3)) {
+            mReaction.translation(0.0f, 10.0f, 0.0f);
+          }
+        }
+      }
+
+      triTransformed.p[0] = triTransformed.p[0] * mReaction;
+      triTransformed.p[1] = triTransformed.p[1] * mReaction;
+      triTransformed.p[2] = triTransformed.p[2] * mReaction;
 
       // Calculate triangle normal
       vec3d normal, line1, line2;
@@ -620,9 +655,9 @@ private:
         triViewed.p[0] = triTransformed.p[0] * matCamera;
         triViewed.p[1] = triTransformed.p[1] * matCamera;
         triViewed.p[2] = triTransformed.p[2] * matCamera;
-        triViewed.t[0] = triTransformed.t[0];
-        triViewed.t[1] = triTransformed.t[1];
-        triViewed.t[2] = triTransformed.t[2];
+        triViewed.t[0] = tri.t[0];
+        triViewed.t[1] = tri.t[1];
+        triViewed.t[2] = tri.t[2];
 
         // Clip triViewed against near plane
         std::vector<triangle> clipped = triViewed.clip_against_plane(
@@ -842,7 +877,8 @@ public:
 
     // Make translation matrix
     mat4 matTrans1;
-    matTrans1.translation(0.0f, 0.0f, fTheta * 2.0f);
+    // matTrans1.translation(0.0f, 0.0f, fTheta * 2.0f);
+    matTrans1.translation(0.0f, fTheta * -1.0f, 0.0f);
 
     mat4 matTrans2;
     matTrans2.translation(0.0f, -10.0f, 0.0f);
@@ -873,9 +909,9 @@ public:
     // Make vector of trinagles to raster
     std::vector<triangle> vecTriangleToRaster;
 
-    getTrianglesToRaster(meshes[0], vecTriangleToRaster, matWorld1, matCamera,
-                         0);
     getTrianglesToRaster(meshes[1], vecTriangleToRaster, matWorld2, matCamera);
+    getTrianglesToRaster(meshes[0], vecTriangleToRaster, matWorld1, matCamera,
+                         0, true);
 
     // DRAW TRIANGLES
     // Sort triangles by depth (from back to front)
