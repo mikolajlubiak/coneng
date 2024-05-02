@@ -413,7 +413,7 @@ struct triangle {
 
       // Copy appearance info to new triangle
       temp.col = this->col;
-	  temp.spriteId = this->spriteId;
+      temp.spriteId = this->spriteId;
 
       // The inside point is valid, so keep that...
       temp.p[0] = *inside_points[0];
@@ -446,7 +446,7 @@ struct triangle {
 
       // Copy appearance info to new triangles
       temp.col = this->col;
-	  temp.spriteId = this->spriteId;
+      temp.spriteId = this->spriteId;
 
       // The first triangle consists of the two inside points and a new
       // point determined by the location where one side of the triangle
@@ -825,7 +825,7 @@ public:
     float ypos = static_cast<float>(vMouse.y);
 
     float xoffset = xpos - fLastX;
-    float yoffset = ypos - fLastY;
+    float yoffset = fLastY - ypos;
 
     fLastX = xpos;
     fLastY = ypos;
@@ -835,11 +835,6 @@ public:
 
     fYaw += xoffset;
     fPitch += yoffset;
-
-    if (fPitch > 89.0f)
-      fPitch = 89.0f;
-    if (fPitch < -89.0f)
-      fPitch = -89.0f;
 
     mat4 matRotZ, matRotX;
     matRotZ.rotation_z(fTheta / 2.0f);
@@ -1135,7 +1130,7 @@ public:
 
 int main() {
   ConEng engine;
-  if (engine.Construct(256, 240, 4, 4))
+  if (engine.Construct(800, 800, 1, 1))
     engine.Start();
   else
     std::cerr << "Could not construct" << std::endl;
