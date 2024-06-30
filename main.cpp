@@ -820,6 +820,9 @@ public:
     if (GetKey(olc::Key::PGUP).bHeld)
       fPitch -= 2.0f * fElapsedTime;
 
+    if (GetKey(olc::Key::ESCAPE).bHeld)
+      return false;
+
     vMouse = GetMousePos();
 
     float xpos = static_cast<float>(vMouse.x);
