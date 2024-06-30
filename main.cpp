@@ -9,6 +9,7 @@
 #include <strstream>
 #include <utility>
 #include <vector>
+#include <memory>
 
 #define RESERVE_VERTS 64
 #define RESERVE_TRIS RESERVE_VERTS * 2
@@ -584,7 +585,7 @@ private:
 
   float *pDepthBuffer;
 
-  olc::Sprite *sSprite;
+  std::vector<std::shared_ptr<const olc::Sprite>> sSprites;
 
   void getTrianglesToRaster(const mesh &m, std::vector<triangle> &v,
                             const mat4 &matWorld, const mat4 &matCamera,
@@ -782,7 +783,7 @@ public:
     temp.loadObj("mountains.obj");
     meshes.emplace_back(temp);
 
-    sSprite = new olc::Sprite("jario.png");
+    sSprites.push_back(std::make_shared<olc::Sprite>("jario.png"));
 
     matProj.projection(-90.0f,
                        static_cast<float>(ScreenHeight()) /
@@ -952,7 +953,7 @@ public:
           textured_triangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.t[0].w,
                             t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v, t.t[1].w,
                             t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, t.t[2].w,
-                            sSprite);
+                            sSprites[0]);
         } else {
           FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x,
                        t.p[2].y, t.col);
@@ -970,7 +971,7 @@ public:
   void textured_triangle(int x1, int y1, float u1, float v1, float w1, int x2,
                          int y2, float u2, float v2, float w2, int x3, int y3,
                          float u3, float v3, float w3,
-                         const olc::Sprite *const tex) {
+                         const std::shared_ptr<const olc::Sprite> tex) {
     if (y2 < y1) {
       std::swap(y1, y2);
       std::swap(x1, x2);
