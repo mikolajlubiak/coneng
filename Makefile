@@ -5,10 +5,10 @@ DEBUGFLAGS := --debug -DDEBUG
 RELEASEFLAGS := -Ofast -march=native -mtune=native
 
 debug: $(SRC_FILES)
-	g++ $(CXXFLAGS) $(DEBUGFLAGS) $(LDFLAGS) -o $@ $^
+	g++ $(CXXFLAGS) $(DEBUGFLAGS) -o $@ $^ $(LDFLAGS)
 
 release: $(SRC_FILES)
-	g++ $(CXXFLAGS) $(RELEASEFLAGS) $(LDFLAGS) -o $@ $^
+	g++ $(CXXFLAGS) $(RELEASEFLAGS) -o $@ $^ $(LDFLAGS)
 
 clean:
 	rm -rf release debug
